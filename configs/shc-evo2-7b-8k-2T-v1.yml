@@ -1,4 +1,7 @@
 model_name: shc-evo2-7b-8k-2T-v1
+
+diff_reference: True
+
 vocab_size: 512
 hidden_size: 4096
 # Number of long convolution filters in each hyena block. Can be smaller than `hidden_size`
@@ -9,16 +12,16 @@ hcs_layer_idxs: [0,5,9,13,16,21,24,28]
 attn_layer_idxs: [8,19,31]
 
 hcm_filter_length: 128
-hcs_filter_length: 4
+hcs_filter_length: 7
 num_layers: 32
 
 # Length of the short, depthwise FIR applied to input projections
 short_filter_length: 3 
 num_attention_heads: 32
-short_filter_bias: true # add bias to FIR
+short_filter_bias: false # add bias to FIR
 mlp_init_method: torch.nn.init.zeros_
 mlp_output_init_method: torch.nn.init.zeros_
-eps: 1e-6
+eps: 0.000001
 state_size: 8
 rotary_emb_base: 1000000 
 make_vocab_size_divisible_by: 8
@@ -27,7 +30,7 @@ inner_mlp_size: 11008
 log_intermediate_values: False
 # Number of groups in GQA
 proj_groups: 1
-# Number of groups in grouped hyena
+# Number of groups in grouped 
 hyena_filter_groups: 1
 # Split strategy for channels
 column_split_hyena: True
@@ -35,8 +38,9 @@ column_split: False
 # Legacy options for MP / PP inference
 model_parallel_size: 1
 pipe_parallel_size: 1
-tie_embeddings: False
-mha_out_proj_bias: False
+tie_embeddings: True
+mha_out_proj_bias: True
+hyena_out_proj_bias: True
 qkv_proj_bias: False
 max_seqlen: 32768
 max_batch_size: 1

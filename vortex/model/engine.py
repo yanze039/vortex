@@ -9,11 +9,12 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+from einops import rearrange
 try:
     import conv1d_cpp
 except:
     pass
-from stripedhyena.utils import column_split
+from vortex.model.utils import column_split
 
 IIR_PREFILL_MODES = [
     "recurrence",
@@ -23,6 +24,61 @@ IIR_PREFILL_MODES = [
     "canonical-fft",
     "iir-fir-caching",
 ]
+
+
+def fftconv_func(u, k, D, dropout_mask, gelu=True, k_rev=None, bidirectional=False):
+    seqlen = u.shape[-1]
+    fft_size = 2 * seqlen
+
+    print(f"SHAAPE {k.shape}")
+
+    if k.shape[-1] < seqlen:
+        k_padded = torch.nn.functional.pad(k, (0, seqlen - k.shape[-1]))
+
+    if bidirectional:
+        u_f = torch.fft.rfft(u.to(dtype=k.dtype), n=fft_size)
+
+        k, k2 = k.split(k.shape[1] // 2, dim=1)
+
+        k_f = torch.fft.rfft(k, n=fft_size) / fft_size
+        k2_f = torch.fft.rfft(k2, n=fft_size) / fft_size
+
+        if len(u.shape) > 3:
+            k_f = k_f.unsqueeze(1)
+            k2_f = k2_f.unsqueeze(1)
+
+        y1 = u_f * k_f
+        y2 = u_f.conj() * k2_f.conj()
+
+        y = torch.fft.irfft(y1 + y2, n=fft_size, norm="forward")[..., :seqlen]
+
+    else:
+        k_f = torch.fft.rfft(k, n=fft_size) / fft_size
+        if k_rev is not None:
+            k_rev_f = torch.fft.rfft(k_rev, n=fft_size) / fft_size
+            k_f = k_f + k_rev_f.conj()
+
+        u_f = torch.fft.rfft(u.to(dtype=k.dtype), n=fft_size)
+
+        if len(u.shape) > 3:
+            k_f = k_f.unsqueeze(1)
+
+        y = torch.fft.irfft(u_f * k_f, n=fft_size, norm="forward")[..., :seqlen]
+
+
+    print(f"post conv pre bias {y} {y.min()} {y.max()}")
+
+    out = y + u * D.unsqueeze(-1)
+
+    print(f"post conv post bias {out} {out.min()} {out.max()}")
+
+    if gelu:
+        out = F.gelu(out)
+    if dropout_mask is not None:
+        return (out * rearrange(dropout_mask, "b H -> b H 1")).to(dtype=u.dtype)
+    else:
+        return out.to(dtype=u.dtype)
+    
 
 
 def canonicalize_modal_system(poles, residues):
@@ -71,44 +127,153 @@ class HyenaInferenceEngine:
         weight,
         bias,
         L,
+        dims,
+        gated_bias=False,
+        column_split_hyena=False,
+        dim_last=True,
         fir_length=3,
+        gate=False,
         inference_params=None,
         prefill_mode=None,
         padding_mask=None,
     ):
-        """Compute the output state of the long convolutional filter."""
+        L = u.shape[1] if dim_last else u.shape[2]
+        if gate:
+            hidden_size, num_attention_heads, hidden_size_per_attention_head, _, _ = dims
+            # Compatibility with training infra that column splits the projections
+            if column_split_hyena:
+                u = u.reshape(
+                    u.shape[0],
+                    num_attention_heads,
+                    3 * hidden_size_per_attention_head,
+                    u.shape[2],
+                )
+                x2, x1, v = (
+                    u[:, :, :hidden_size_per_attention_head],
+                    u[
+                        :,
+                        :,
+                        hidden_size_per_attention_head : 2 * hidden_size_per_attention_head,
+                    ],
+                    u[:, :, 2 * hidden_size_per_attention_head :],
+                )
+                x2, x1, v = (
+                    x2.reshape(x2.shape[0], -1, x2.shape[-1]),
+                    x1.reshape(x1.shape[0], -1, x1.shape[-1]), 
+                    v.reshape(v.shape[0], -1, v.shape[-1]),
+                )
+            else:
+                x2, x1, v = u.split([hidden_size, hidden_size, hidden_size], dim=1)
+
+            u = x1 * v
+
+            print(f"q: {x2}, {x2.min()}, {x2.max()}")
+
+            print(f"k: {x1}, {x1.min()}, {x1.max()}")
+
+            print(f"v: {v}, {v.min()}, {v.max()}")
+
+            # breakpoint()
         # prepare input layout, dimensions and dispatch to fir kernel
+        # Deprecated
         if fir_fn != torch.nn.functional.conv1d:
-            z_pre = fir_fn(u)[:, :L]  # B, L, D
-            z_pre = z_pre.permute(0, 2, 1)
+            if dim_last:
+                u = u.permute(0, 2, 1)  # B, D, L
+            z = fir_fn(u)[:, :L]  # B, L, D
+
+        elif fir_length >= 128:
+            with torch.autocast("cuda"):
+                z = fftconv_func(
+                    u.to(torch.float32),
+                    weight[:,0,:L].to(torch.float32),
+                    bias,
+                    None,
+                    gelu=False,
+                    bidirectional=False,
+                )
+                z = z.to(u.dtype)
         else:
-            u = u.permute(0, 2, 1)  # B, D, L
-            z_pre = fir_fn(
-                u,
-                weight,
+            if dim_last:
+                u = u.permute(0, 2, 1)  # B, D, L
+
+            z = fir_fn(
+                u.to(torch.float32),
+                weight.to(torch.float32),
                 bias=None,  
                 stride=1,
                 padding=fir_length - 1,
                 groups=u.shape[1],
             )[..., :L]
+            z = z.to(u.dtype)
 
+            if gated_bias is False:
+                print(f"post dw conv {z} {z.min()} {z.max()}")
+                try:
+                    z_savanna = torch.load(f"/home/zymrael/checkpoints/evo2/activations/savanna/post_dw_conv_{self.layer_idx}.pt")
+                    z_savanna = z_savanna.permute(1, 2, 0)
+                    z_diff = (z.squeeze() - z_savanna.squeeze()).abs().max()
+                    print(f"dw_conv_diff: {z_diff}")
+                except:
+                    pass
+            
             if bias is not None:
-                z_pre = z_pre + bias[None, :, None]
+                if gated_bias:
+                    z = z + bias[None, :, None] * u
+                else:
+                    z = z + bias[None, :, None]
 
         # handle padding post fir, the only place with biases
         if type(padding_mask) == torch.Tensor:
-            z_pre = z_pre * padding_mask[:, None]
+            z = z * padding_mask[:, None]
+
+        if gate:
+            z = x2 * z
+
+            print(f"hyena filter: {weight}, {weight.min()}, {weight.max()}")
+
+            print(f"post hyena gate: {z}, {z.min()}, {z.max()}")
+
+
+            try:
+                q_savanna = torch.load(f"/home/zymrael/checkpoints/evo2/activations/savanna/q_{self.layer_idx}.pt")
+                k_savanna = torch.load(f"/home/zymrael/checkpoints/evo2/activations/savanna/k_{self.layer_idx}.pt")
+                v_savanna = torch.load(f"/home/zymrael/checkpoints/evo2/activations/savanna/v_{self.layer_idx}.pt")
+
+                q_diff = (x2 - q_savanna).abs().max()
+                k_diff = (x1 - k_savanna).abs().max()
+                v_diff = (v - v_savanna).abs().max()
+
+                print(f"q_diff: {q_diff}")
+                print(f"k_diff: {k_diff}")
+                print(f"v_diff: {v_diff}")
+
+                
+                
+            except:
+                pass
+
+
+
+            try:
+                #z_savanna = torch.load(f"/home/zymrael/checkpoints/evo2/activations/savanna/post_hyena_gate_{self.layer_idx}.pt")
+                h_savanna = torch.load(f"/home/zymrael/checkpoints/evo2/activations/savanna/hyena_filter_{self.layer_idx}.pt")
+
+                 
+                #z_diff = (z - z_savanna.squeeze()).abs().max()
+                h_diff = (weight[..., :h_savanna.shape[-1]].squeeze() - h_savanna.squeeze()).abs().max()
+
+                #print(f"z_diff: {z_diff}")
+                print(f"h_diff: {h_diff}")
+            except:
+                pass
+
 
         if inference_params is not None:
-            # handle seqlen last and dim last cases for `u`
-            if fir_fn != torch.nn.functional.conv1d:
-                fir_state = u[:, -fir_length + 1 :].permute(0, 2, 1)
-            else:
-                fir_state = u[..., -fir_length + 1 :]
+            fir_state = u[..., -fir_length + 1 :]
         else:
             fir_state = None
-
-        return z_pre, fir_state
+        
+        return z, fir_state
 
     def parallel_iir(
         self,
@@ -157,6 +322,7 @@ class HyenaInferenceEngine:
         else:
             x2, x1, v = z_pre.split([hidden_size, hidden_size, hidden_size], dim=1)
 
+        # oint()
         x1v = x1 * v
 
         if inference_params is not None and prefill_style == "recurrence":
@@ -199,6 +365,41 @@ class HyenaInferenceEngine:
         y = y.to(dtype=x1v.dtype)
         y = (y + x1v * D.unsqueeze(-1)) * x2
 
+        print(f"hyena filter: {h}, {h.min()}, {h.max()}")
+        print(f"post hyena iir gate: {y}, {y.min()}, {y.max()}")
+
+
+        try:
+            
+            q_savanna = torch.load(f"/home/zymrael/checkpoints/evo2/activations/savanna/q_{self.layer_idx}.pt")
+            k_savanna = torch.load(f"/home/zymrael/checkpoints/evo2/activations/savanna/k_{self.layer_idx}.pt")
+            v_savanna = torch.load(f"/home/zymrael/checkpoints/evo2/activations/savanna/v_{self.layer_idx}.pt")
+
+            q_diff = (x2 - q_savanna).abs().max()
+            k_diff = (x1 - k_savanna).abs().max()
+            v_diff = (v - v_savanna).abs().max()
+
+            print(f"q_diff: {q_diff}")
+            print(f"k_diff: {k_diff}")
+            print(f"v_diff: {v_diff}")
+            
+        except:
+            pass
+
+
+
+        try:
+            #z_savanna = torch.load(f"/home/zymrael/checkpoints/evo2/activations/savanna/post_hyena_gate_{self.layer_idx}.pt")
+            h_savanna = torch.load(f"/home/zymrael/checkpoints/evo2/activations/savanna/hyena_filter_{self.layer_idx}.pt")
+
+            #z_diff = (z - z_savanna.squeeze()).abs().max()
+            h_diff = (h[..., :h_savanna.shape[-1]].squeeze() - h_savanna.squeeze()).abs().max() 
+
+            #print(f"z_diff: {z_diff}")
+            print(f"h_diff: {h_diff}")
+        except:
+            pass
+
         if inference_params is not None:
             if prefill_style == "fft":
                 self.prefill_via_modal_fft(
@@ -231,7 +432,7 @@ class HyenaInferenceEngine:
 
         Note:
         `fir_state` contains the last `short_filter_length - 1` elements of `u`: `u_(L-2), u_{L-1), ...`
-        We assume dimensions of `short_filter_weight` to be `[d, 1, short_filter_len]` (SISO / multi SISO layout).
+        We assume dimensions of `short_filter_weight` to be `[d, 1, short_filter_len]`.
         """
         h0, h = weight[..., 0, -1], weight[..., 0, :-1]
         h0, h = h0[None], h[None]

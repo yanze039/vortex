@@ -8,9 +8,9 @@
 
 import torch
 
-from stripedhyena.sample import sample
-from stripedhyena.tokenizer import CharLevelTokenizer
-from stripedhyena.utils import print_rank_0
+from vortex.model.sample import sample
+from vortex.model.tokenizer import CharLevelTokenizer
+from vortex.model.utils import print_rank_0
 
 
 class Generator:

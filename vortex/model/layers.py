@@ -10,7 +10,7 @@ import torch.nn.functional as F
 from einops import rearrange
 from torch import Tensor
 
-from stripedhyena.utils import grab_first_if_tuple
+from vortex.model.utils import grab_first_if_tuple
 
 
 class RMSNorm(torch.nn.Module):
@@ -28,20 +28,25 @@ class RMSNorm(torch.nn.Module):
             self.rmsnorm_func = rmsnorm_func
 
     def forward(self, x):
+        # print(f"scale rmsnorm: {self.scale}, {self.scale.min()}, {self.scale.max()}")
+            
+
         if self.use_flash_rmsnorm:
             return self.rmsnorm_func(x, self.scale, self.eps)
         else:
             y = x / (x.norm(2, dim=-1, keepdim=True) * self.hidden_size ** (-1.0 / 2) + self.eps)
             return self.scale * y
-
+    
 
 class ParallelGatedMLP(nn.Module):
     def __init__(
         self,
         config,
+        layer_idx,
     ):
         super().__init__()
 
+        self.layer_idx = layer_idx
         multiple_of = config.get("inner_size_multiple_of", 64)
         self.act_type = config.get("mlp_activation", "silu")
         if self.act_type == "gelu":
@@ -75,7 +80,27 @@ class ParallelGatedMLP(nn.Module):
 
     def forward(self, z):
         z1, z2 = self.l1(z), self.l2(z)
+        print(f"z1: {z1} {z1.min()}, {z1.max()}")
+        print(f"z2: {z2} {z2.min()}, {z2.max()}, {self.act}")
+
+        try:
+            z1_savanna = torch.load(f"/home/zymrael/checkpoints/evo2/activations/savanna/w1_out_{self.layer_idx}.pt")
+            z2_savanna = torch.load(f"/home/zymrael/checkpoints/evo2/activations/savanna/w2_out_{self.layer_idx}.pt")
+            z1_savanna = z1_savanna.to(z1.device)
+            z2_savanna = z2_savanna.to(z2.device)
+            z1_diff = (z1.squeeze() - z1_savanna.squeeze()).abs().max()
+            z2_diff = (z2.squeeze() - z2_savanna.squeeze()).abs().max()
+            print(f"z1_diff: {z1_diff}, z2_diff: {z2_diff}")
+
+            z1_act = torch.load(f"/home/zymrael/checkpoints/evo2/activations/savanna/w1_out_act_{self.layer_idx}.pt")
+            diff = (z1_act.squeeze() - self.act(z1).squeeze()).abs().max()
+            print(f"z1_act_diff: {diff}")
+        except:
+            pass
+
+
         z1, z2 = grab_first_if_tuple(z1), grab_first_if_tuple(z2)
+
         y = self.l3(self.act(z1) * z2)
         return grab_first_if_tuple(y)
 

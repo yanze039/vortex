@@ -3,9 +3,9 @@ requires = ["setuptools", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "stripedhyena"
-version = "0.2.1"
-description = "Model and inference code for beyond Transformer architectures"
+name = "vortex"
+version = "0.0.1"
+description = ""
 readme = "README.md"
 license = {file = "LICENSE"}
 authors = [{ name = "Michael Poli"}]
@@ -25,4 +25,5 @@ combine_as_imports = true
 combine_star = true
 
 [tool.setuptools]
-packages = ['stripedhyena']
+packages = ['vortex']
+

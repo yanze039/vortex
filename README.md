@@ -1,4 +1,6 @@
 # Vortex
 
-Efficient inference and utilities of Deep Signal Processing models.
+Utilities for efficient inference and training of deep signal processing models.
+
+
 
