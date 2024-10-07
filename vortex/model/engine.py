@@ -15,6 +15,7 @@ try:
 except:
     pass
 from vortex.model.utils import column_split
+from vortex.logging import activations_logger
 
 IIR_PREFILL_MODES = [
     "recurrence",
@@ -26,11 +27,18 @@ IIR_PREFILL_MODES = [
 ]
 
 
-def fftconv_func(u, k, D, dropout_mask, gelu=True, k_rev=None, bidirectional=False):
+def fftconv_func(
+        u, 
+        k, 
+        D, 
+        dropout_mask, 
+        gelu=True, 
+        k_rev=None, 
+        bidirectional=False,
+        print_activations=False):
     seqlen = u.shape[-1]
     fft_size = 2 * seqlen
 
-    print(f"SHAAPE {k.shape}")
 
     if k.shape[-1] < seqlen:
         k_padded = torch.nn.functional.pad(k, (0, seqlen - k.shape[-1]))
@@ -65,12 +73,11 @@ def fftconv_func(u, k, D, dropout_mask, gelu=True, k_rev=None, bidirectional=Fal
 
         y = torch.fft.irfft(u_f * k_f, n=fft_size, norm="forward")[..., :seqlen]
 
-
-    print(f"post conv pre bias {y} {y.min()} {y.max()}")
+    if print_activations: activations_logger.info(f"post fftconv pre bias {y} {y.min()} {y.max()}")
 
     out = y + u * D.unsqueeze(-1)
 
-    print(f"post conv post bias {out} {out.min()} {out.max()}")
+    if print_activations: activations_logger.info(f"post fftconv post bias {out} {out.min()} {out.max()}")
 
     if gelu:
         out = F.gelu(out)
@@ -113,12 +120,16 @@ class HyenaInferenceEngine:
         fir_fn=None,
         iir_prefill_style="modal-fft",
         layer_idx=None,
+        ground_truth_activations_path=None,
+        print_activations=False,
     ) -> None:
         self.fir_fn = fir_fn
         assert iir_prefill_style in IIR_PREFILL_MODES, f"iir_prefill_style must be one of {IIR_PREFILL_MODES}"
         self.iir_prefill_style = iir_prefill_style
         self.layer_idx = layer_idx
         self.low_mem_mode = False
+        self.ground_truth_activations_path = ground_truth_activations_path
+        self.print_activations = print_activations
 
     def parallel_fir(
         self,
@@ -142,38 +153,17 @@ class HyenaInferenceEngine:
             hidden_size, num_attention_heads, hidden_size_per_attention_head, _, _ = dims
             # Compatibility with training infra that column splits the projections
             if column_split_hyena:
-                u = u.reshape(
-                    u.shape[0],
-                    num_attention_heads,
-                    3 * hidden_size_per_attention_head,
-                    u.shape[2],
-                )
-                x2, x1, v = (
-                    u[:, :, :hidden_size_per_attention_head],
-                    u[
-                        :,
-                        :,
-                        hidden_size_per_attention_head : 2 * hidden_size_per_attention_head,
-                    ],
-                    u[:, :, 2 * hidden_size_per_attention_head :],
-                )
-                x2, x1, v = (
-                    x2.reshape(x2.shape[0], -1, x2.shape[-1]),
-                    x1.reshape(x1.shape[0], -1, x1.shape[-1]), 
-                    v.reshape(v.shape[0], -1, v.shape[-1]),
-                )
+                x2, x1, v = column_split(u, num_attention_heads, hidden_size_per_attention_head)
             else:
                 x2, x1, v = u.split([hidden_size, hidden_size, hidden_size], dim=1)
 
             u = x1 * v
 
-            print(f"q: {x2}, {x2.min()}, {x2.max()}")
+            if self.print_activations:  
+                activations_logger.info(f"q: {x2}, {x2.min()}, {x2.max()}")
+                activations_logger.info(f"k: {x1}, {x1.min()}, {x1.max()}")
+                activations_logger.info(f"v: {v}, {v.min()}, {v.max()}")
 
-            print(f"k: {x1}, {x1.min()}, {x1.max()}")
-
-            print(f"v: {v}, {v.min()}, {v.max()}")
-
-            # breakpoint()
         # prepare input layout, dimensions and dispatch to fir kernel
         # Deprecated
         if fir_fn != torch.nn.functional.conv1d:
@@ -190,6 +180,7 @@ class HyenaInferenceEngine:
                     None,
                     gelu=False,
                     bidirectional=False,
+                    print_activations=self.print_activations,
                 )
                 z = z.to(u.dtype)
         else:
@@ -207,14 +198,13 @@ class HyenaInferenceEngine:
             z = z.to(u.dtype)
 
             if gated_bias is False:
-                print(f"post dw conv {z} {z.min()} {z.max()}")
-                try:
-                    z_savanna = torch.load(f"/home/zymrael/checkpoints/evo2/activations/savanna/post_dw_conv_{self.layer_idx}.pt")
-                    z_savanna = z_savanna.permute(1, 2, 0)
-                    z_diff = (z.squeeze() - z_savanna.squeeze()).abs().max()
-                    print(f"dw_conv_diff: {z_diff}")
-                except:
-                    pass
+                if self.print_activations:
+                    activations_logger.info(f"post dw conv {z} {z.min()} {z.max()}")
+                    if self.ground_truth_activations_path:
+                        z_savanna = torch.load(f"{self.ground_truth_activations_path}/post_dw_conv_{self.layer_idx}.pt")
+                        z_savanna = z_savanna.permute(1, 2, 0)
+                        z_diff = (z.squeeze() - z_savanna.squeeze()).abs().max()
+                        activations_logger.info(f"dw_conv_diff: {z_diff}")
             
             if bias is not None:
                 if gated_bias:
@@ -229,43 +219,26 @@ class HyenaInferenceEngine:
         if gate:
             z = x2 * z
 
-            print(f"hyena filter: {weight}, {weight.min()}, {weight.max()}")
+            if self.print_activations:
+                activations_logger.info(f"hyena filter: {weight}, {weight.min()}, {weight.max()}")
+                activations_logger.info(f"post hyena gate: {z}, {z.min()}, {z.max()}")
+                if self.ground_truth_activations_path:
+                    q_savanna = torch.load(f"{self.ground_truth_activations_path}/q_{self.layer_idx}.pt")
+                    k_savanna = torch.load(f"{self.ground_truth_activations_path}/k_{self.layer_idx}.pt")
+                    v_savanna = torch.load(f"{self.ground_truth_activations_path}/v_{self.layer_idx}.pt")
 
-            print(f"post hyena gate: {z}, {z.min()}, {z.max()}")
+                    q_diff = (x2 - q_savanna).abs()
+                    k_diff = (x1 - k_savanna).abs()
+                    v_diff = (v - v_savanna).abs()
 
+                    activations_logger.info(f"q_diff: {q_diff.max()}, {q_diff.mean()}")
+                    activations_logger.info(f"k_diff: {k_diff.max()}, {k_diff.mean()}")
+                    activations_logger.info(f"v_diff: {v_diff.max()}, {v_diff.mean()}")
 
-            try:
-                q_savanna = torch.load(f"/home/zymrael/checkpoints/evo2/activations/savanna/q_{self.layer_idx}.pt")
-                k_savanna = torch.load(f"/home/zymrael/checkpoints/evo2/activations/savanna/k_{self.layer_idx}.pt")
-                v_savanna = torch.load(f"/home/zymrael/checkpoints/evo2/activations/savanna/v_{self.layer_idx}.pt")
+                    h_savanna = torch.load(f"/home/zymrael/checkpoints/evo2/activations/savanna/hyena_filter_{self.layer_idx}.pt")
+                    h_diff = (weight[..., :h_savanna.shape[-1]].squeeze() - h_savanna.squeeze()).abs()
 
-                q_diff = (x2 - q_savanna).abs().max()
-                k_diff = (x1 - k_savanna).abs().max()
-                v_diff = (v - v_savanna).abs().max()
-
-                print(f"q_diff: {q_diff}")
-                print(f"k_diff: {k_diff}")
-                print(f"v_diff: {v_diff}")
-
-                
-                
-            except:
-                pass
-
-
-
-            try:
-                #z_savanna = torch.load(f"/home/zymrael/checkpoints/evo2/activations/savanna/post_hyena_gate_{self.layer_idx}.pt")
-                h_savanna = torch.load(f"/home/zymrael/checkpoints/evo2/activations/savanna/hyena_filter_{self.layer_idx}.pt")
-
-                 
-                #z_diff = (z - z_savanna.squeeze()).abs().max()
-                h_diff = (weight[..., :h_savanna.shape[-1]].squeeze() - h_savanna.squeeze()).abs().max()
-
-                #print(f"z_diff: {z_diff}")
-                print(f"h_diff: {h_diff}")
-            except:
-                pass
+                    activations_logger.info(f"h_diff: {h_diff.max()}, {h_diff.mean()}")
 
 
         if inference_params is not None:
@@ -365,40 +338,27 @@ class HyenaInferenceEngine:
         y = y.to(dtype=x1v.dtype)
         y = (y + x1v * D.unsqueeze(-1)) * x2
 
-        print(f"hyena filter: {h}, {h.min()}, {h.max()}")
-        print(f"post hyena iir gate: {y}, {y.min()}, {y.max()}")
 
+        if self.print_activations:
+            activations_logger.info(f"hyena filter: {h}, {h.min()}, {h.max()}")
+            activations_logger.info(f"post hyena iir gate: {y}, {y.min()}, {y.max()}")
+            if self.ground_truth_activations_path:
+                q_savanna = torch.load(f"{self.ground_truth_activations_path}/q_{self.layer_idx}.pt")
+                k_savanna = torch.load(f"{self.ground_truth_activations_path}/k_{self.layer_idx}.pt")
+                v_savanna = torch.load(f"{self.ground_truth_activations_path}/v_{self.layer_idx}.pt")
 
-        try:
-            
-            q_savanna = torch.load(f"/home/zymrael/checkpoints/evo2/activations/savanna/q_{self.layer_idx}.pt")
-            k_savanna = torch.load(f"/home/zymrael/checkpoints/evo2/activations/savanna/k_{self.layer_idx}.pt")
-            v_savanna = torch.load(f"/home/zymrael/checkpoints/evo2/activations/savanna/v_{self.layer_idx}.pt")
+                q_diff = (x2 - q_savanna).abs()
+                k_diff = (x1 - k_savanna).abs()
+                v_diff = (v - v_savanna).abs()
 
-            q_diff = (x2 - q_savanna).abs().max()
-            k_diff = (x1 - k_savanna).abs().max()
-            v_diff = (v - v_savanna).abs().max()
+                activations_logger.info(f"q_diff: {q_diff.max()}, {q_diff.mean()}")
+                activations_logger.info(f"k_diff: {k_diff.max()}, {k_diff.mean()}")
+                activations_logger.info(f"v_diff: {v_diff.max()}, {v_diff.mean()}")
 
-            print(f"q_diff: {q_diff}")
-            print(f"k_diff: {k_diff}")
-            print(f"v_diff: {v_diff}")
-            
-        except:
-            pass
+                h_savanna = torch.load(f"/home/zymrael/checkpoints/evo2/activations/savanna/hyena_filter_{self.layer_idx}.pt")
 
-
-
-        try:
-            #z_savanna = torch.load(f"/home/zymrael/checkpoints/evo2/activations/savanna/post_hyena_gate_{self.layer_idx}.pt")
-            h_savanna = torch.load(f"/home/zymrael/checkpoints/evo2/activations/savanna/hyena_filter_{self.layer_idx}.pt")
-
-            #z_diff = (z - z_savanna.squeeze()).abs().max()
-            h_diff = (h[..., :h_savanna.shape[-1]].squeeze() - h_savanna.squeeze()).abs().max() 
-
-            #print(f"z_diff: {z_diff}")
-            print(f"h_diff: {h_diff}")
-        except:
-            pass
+                h_diff = (h[..., :h_savanna.shape[-1]].squeeze() - h_savanna.squeeze()).abs() 
+                activations_logger.info(f"h_diff: {h_diff.max()}, {h_diff.mean()}")
 
         if inference_params is not None:
             if prefill_style == "fft":
@@ -427,7 +387,7 @@ class HyenaInferenceEngine:
 
         return y.permute(0, 2, 1)
 
-    def step_fir(self, u, fir_state, weight, bias=None):
+    def step_fir(self, u, fir_state, weight, bias=None, gated_bias=False, flip_filter=False):
         """Step the FIR filter.
 
         Note:
@@ -436,9 +396,20 @@ class HyenaInferenceEngine:
         """
         h0, h = weight[..., 0, -1], weight[..., 0, :-1]
         h0, h = h0[None], h[None]
-        y = h0 * u + torch.sum(fir_state * h, dim=-1) + bias
 
-        # update
+        # We have to explicitly handle the cases where input prompts are shorter than the FIR state length
+        h = h[..., :fir_state.shape[-1]]
+        if flip_filter:
+            h = h.flip(-1)
+
+        y = h0 * u + torch.sum(fir_state * h, dim=-1) 
+        if bias is not None:
+            if gated_bias:
+                y += bias * u
+            else:
+                y += bias
+
+        # Update the state
         fir_state = torch.roll(fir_state, -1, dims=2)
         fir_state[..., -1] = u
         return y, fir_state

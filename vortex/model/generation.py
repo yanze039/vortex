@@ -80,7 +80,9 @@ class Generator:
         if cached_generation:
             inference_params_dict_out = self.model.initialize_inference_params()
             inference_params_dict_out["mha"].max_batch_size = batch_size
-            inference_params_dict_out["hyena"].max_batch_size = batch_size
+            inference_params_dict_out["hcl"].max_batch_size = batch_size
+            inference_params_dict_out["hcm"].max_batch_size = batch_size
+            inference_params_dict_out["hcs"].max_batch_size = batch_size
         else:
             inference_params_dict_out = None
 
@@ -102,11 +104,16 @@ class Generator:
 
                 if seqlen_offset == 0:
                     seqlen_offset = input.shape[-1]
-                    inference_params_dict_out["hyena"].seqlen_offset = seqlen_offset
                     inference_params_dict_out["mha"].seqlen_offset = seqlen_offset
+                    inference_params_dict_out["hcl"].seqlen_offset = seqlen_offset
+                    inference_params_dict_out["hcm"].seqlen_offset = seqlen_offset
+                    inference_params_dict_out["hcs"].seqlen_offset = seqlen_offset
+                    
                 else:
                     inference_params_dict_out["mha"].seqlen_offset += 1
-                    inference_params_dict_out["hyena"].seqlen_offset += 1
+                    inference_params_dict_out["hcl"].seqlen_offset += 1
+                    inference_params_dict_out["hcm"].seqlen_offset += 1
+                    inference_params_dict_out["hcs"].seqlen_offset += 1
 
             # do forward pass with no gradient
             with torch.no_grad():
@@ -116,6 +123,8 @@ class Generator:
                 )
 
             last_logits = logits[:, -1]
+            
+            print(last_logits.shape, last_logits.min(), last_logits.max(), last_logits)
 
             new_idx = sample(
                 last_logits,

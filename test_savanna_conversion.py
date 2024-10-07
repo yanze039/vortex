@@ -1,5 +1,3 @@
-# Copyright (c) 2024, Michael Poli.
-
 # python test_savanna_conversion.py --config_path /home/zymrael/workspace/stripedhyena-2/configs/shc-evo2-7b-8k-2T-v1.yml --logits_path /home/zymrael/checkpoints/evo2/7b_13h_8m_8s_3a_cascade15_inference/logits_test.pt --checkpoint_path /home/zymrael/checkpoints/evo2/7b_13h_8m_8s_3a_cascade15_inference/iter_457500.pt
 
 import argparse
@@ -26,8 +24,6 @@ if __name__ == "__main__":
         help="Use kv and hyena caching to speed up generation.",
     )
 
-
-
     torch.manual_seed(1)
     torch.cuda.manual_seed(1)
     args = parser.parse_args()
@@ -39,20 +35,18 @@ if __name__ == "__main__":
     else:
         tokenizer = HFAutoTokenizer(config.vocab_file)
     
-    print(f"Loaded config: {config}")
 
     device = torch.device("cuda")
     config.cached_generation = False 
 
     m = StripedHyena(config)
     
-    print_rank_0("Loading state dict...", end="\n\n")
 
     if args.checkpoint_path:
         state_dict = torch.load(args.checkpoint_path, map_location=device)
-        print(m.state_dict().keys())
-        print(state_dict.keys())
-        m.load_state_dict(state_dict, strict=False)
+        #print(m.state_dict().keys())
+        #print(state_dict.keys())
+        m.custom_load_state_dict(state_dict, strict=False)
 
     m = m.to(device)
 
@@ -70,26 +64,12 @@ if __name__ == "__main__":
 
     logits_vortex = m.forward(inputs)
 
-    logits_garyk = torch.load('/home/gbrixi/dnagen/eval/bin/evo2_7b_ACTG.pt', map_location=device)
+    # logits_garyk = torch.load('/home/gbrixi/dnagen/eval/bin/evo2_7b_ACTG.pt', map_location=device)
 
-    print(logits_vortex)
+    # print(logits_vortex)
 
-    print(logits_savanna)
+    # print(logits_savanna)
 
-    print(logits_garyk)
-
-    
+    # print(logits_garyk)
 
 
-
-    # with torch.inference_mode():
-    #     g = Generator(m, tokenizer, top_k=1, top_p=1, temperature=1)
-    #     g.generate(
-    #         num_tokens=args.num_tokens,
-    #         cached_generation=args.cached_generation,
-    #         input_string=input_string,
-    #         device=device,
-    #         verbose=True,
-    #         print_generation=True,
-    #         max_seqlen=8192,
-    #     )

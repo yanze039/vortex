@@ -7,14 +7,14 @@ with open("requirements.txt") as f:
     requirements = f.read().split("\n")
 
 setup(
-    name="stripedhyena",
-    version="0.2.1",
-    description="Model and inference code for beyond Transformer architectures",
+    name="vortex",
+    version="0.0.1",
+    description="Inference and utilities for inference and training of deep signal processing models",
     long_description=readme,
     long_description_content_type="text/markdown",
     author="Michael Poli",
-    url="http://github.com/togethercomputer/stripedhyena",
+    url="http://github.com/zymrael/vortex",
     license="Apache-2.0",
-    packages=find_packages(where="stripedhyena"),
+    packages=find_packages(where="vortex"),
     install_requires=requirements,
 )

@@ -1,7 +1,5 @@
 model_name: shc-evo2-7b-8k-2T-v1
 
-diff_reference: True
-
 vocab_size: 512
 hidden_size: 4096
 # Number of long convolution filters in each hyena block. Can be smaller than `hidden_size`
@@ -23,7 +21,7 @@ mlp_init_method: torch.nn.init.zeros_
 mlp_output_init_method: torch.nn.init.zeros_
 eps: 0.000001
 state_size: 8
-rotary_emb_base: 1000000 
+rotary_emb_base: 10000 
 make_vocab_size_divisible_by: 8
 inner_size_multiple_of: 16  # force GLU inner_size to be a multiple of
 inner_mlp_size: 11008
@@ -34,7 +32,7 @@ proj_groups: 1
 hyena_filter_groups: 1
 # Split strategy for channels
 column_split_hyena: True
-column_split: False
+column_split: True
 # Legacy options for MP / PP inference
 model_parallel_size: 1
 pipe_parallel_size: 1
@@ -54,6 +52,8 @@ inference_mode: True
 tokenizer_type: CharLevelTokenizer 
 prefill_style: fft
 mlp_activation: gelu
+print_activations: False
+ground_truth_activations_path: None
 
 # {
 #   "pipe_parallel_size": 0,

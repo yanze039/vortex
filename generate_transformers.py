@@ -18,12 +18,12 @@ def main(args):
     config = AutoConfig.from_pretrained(model_name, trust_remote_code=True)
     config.use_cache = True
     device = torch.device("cuda")
+    
     model = AutoModelForCausalLM.from_pretrained(
         model_name,
         config=config,
         trust_remote_code=True,
     ).to(device)
-    print(args)
 
     while True:
         if args.input_file is None:
@@ -53,13 +53,13 @@ def main(args):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--model-name", type=str, required=True)
-    parser.add_argument("--max-new-tokens", type=int, default=64)
-    parser.add_argument("--input-file", type=str)
+    parser.add_argument("--model_name", type=str, required=True)
+    parser.add_argument("--max_new_tokens", type=int, default=64)
+    parser.add_argument("--input_file", type=str)
     parser.add_argument("--temperature", type=float)
-    parser.add_argument("--repetition-penalty", type=float)
-    parser.add_argument("--penalty-alpha", type=float)
-    parser.add_argument("--top-k", type=int)
-    parser.add_argument("--top-p", type=float)
+    parser.add_argument("--repetition_penalty", type=float)
+    parser.add_argument("--penalty_alpha", type=float)
+    parser.add_argument("--top_k", type=int)
+    parser.add_argument("--top_p", type=float)
 
     main(parser.parse_args())

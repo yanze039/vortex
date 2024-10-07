@@ -1,0 +1,3 @@
+transformers
+tokenizers
+flash_attn>=2.0.0

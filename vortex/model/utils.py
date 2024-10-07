@@ -12,28 +12,47 @@ def column_split(x, num_heads, head_size):
     """Split a tensor with `num_heads` alongside the head dimension, instead of
     across heads. Fixed to three projections
     """
+    # FIXME: merge cases
+    if len(x.shape) == 2:
+        x_reshaped = x.reshape(
+            x.shape[0],
+            num_heads,
+            3 * head_size,
+        )
 
-    x_reshaped = x.reshape(
-        x.shape[0],
-        num_heads,
-        3 * head_size,
-    )
-
-    x2, x1, v = (
-        x_reshaped[:, :, :head_size],
-        x_reshaped[
-            :,
-            :,
-            head_size : 2 * head_size,
-        ],
-        x_reshaped[:, :, 2 * head_size :],
-    )
-    x2, x1, v = (
-        x2.reshape(x2.shape[0], -1),
-        x1.reshape(x1.shape[0], -1),
-        v.reshape(v.shape[0], -1),
-    )
-    return x2, x1, v
+        x2, x1, v = (
+            x_reshaped[..., :head_size],
+            x_reshaped[..., head_size : 2 * head_size],
+            x_reshaped[..., 2 * head_size :],
+        )
+        x2, x1, v = (
+            x2.reshape(x2.shape[0], -1),
+            x1.reshape(x1.shape[0], -1),
+            v.reshape(v.shape[0], -1),
+        )
+        return x2, x1, v
+    else:
+        x = x.reshape(
+            x.shape[0],
+            num_heads,
+            3 * head_size,
+            x.shape[2],
+        )
+        x2, x1, v = (
+            x[:, :, :head_size],
+            x[
+                :,
+                :,
+                head_size : 2 * head_size,
+            ],
+            x[:, :, 2 * head_size :],
+        )
+        x2, x1, v = (
+            x2.reshape(x2.shape[0], -1, x2.shape[-1]),
+            x1.reshape(x1.shape[0], -1, x1.shape[-1]), 
+            v.reshape(v.shape[0], -1, v.shape[-1]),
+        )
+        return x2, x1, v
 
 
 def get_init_from_string(init_str):
