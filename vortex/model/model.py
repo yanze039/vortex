@@ -16,6 +16,7 @@ from vortex.model.utils import column_split, print_rank_0
 from vortex.logging import initialize_vortex_logger, activations_logger
 
 import logging 
+from tqdm import tqdm
 
 from vortex.model.attention import MHA
 
@@ -496,9 +497,11 @@ class StripedHyena(nn.Module):
         else:
             self.flash_fft = None
 
-        self.blocks = nn.ModuleList(
-            get_block(config, layer_idx, flash_fft=self.flash_fft) for layer_idx in range(config.num_layers)
-        )
+        self.logger.info(f"Initializing {config.num_layers} blocks...")
+        self.blocks = nn.ModuleList()
+        for layer_idx in tqdm(range(config.num_layers)):
+            self.blocks.append(get_block(config, layer_idx, flash_fft=self.flash_fft))
+
         self.logger.info(f"Initialized model")
 
     def forward(self, x, inference_params_dict=None, padding_mask=None):
