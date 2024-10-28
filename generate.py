@@ -32,6 +32,7 @@ if __name__ == "__main__":
         action="store_true",
         help="Use caching to speed up generation.",
     )
+    parser.add_argument("--dry_run", action="store_true", help="Dry run the generation.")
 
     torch.manual_seed(1)
     torch.cuda.manual_seed(1)
@@ -47,10 +48,11 @@ if __name__ == "__main__":
     device = torch.device("cuda")
     m = StripedHyena(config)
 
-    if args.checkpoint_path:
-        state_dict = torch.load(args.checkpoint_path, map_location=device)
-        # inv_freq are instantiated as parameters
-        m.load_state_dict(state_dict, strict=False)
+    if not args.dry_run:
+        if args.checkpoint_path:
+            state_dict = torch.load(args.checkpoint_path, map_location=device)
+            # inv_freq are instantiated as parameters
+            m.load_state_dict(state_dict, strict=False)
 
     m = m.to(device)
     m.to_bfloat16_except_pr_lc()
