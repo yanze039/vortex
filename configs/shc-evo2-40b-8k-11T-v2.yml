@@ -27,7 +27,7 @@ state_size: 8
 rotary_emb_base: 10000 
 make_vocab_size_divisible_by: 8
 inner_size_multiple_of: 16  # force GLU inner_size to be a multiple of
-inner_mlp_size: 11008
+inner_mlp_size: 21888
 log_intermediate_values: False
 # Number of groups in GQA
 proj_groups: 1
