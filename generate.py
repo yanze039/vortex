@@ -47,8 +47,9 @@ if __name__ == "__main__":
     else:
         tokenizer = HFAutoTokenizer(config.vocab_file)
 
-    device = torch.device("cuda")
-    m = StripedHyena(config)
+    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+    with torch.device(device):
+        m = StripedHyena(config)
 
     if not args.dry_run:
         if args.checkpoint_path:
@@ -56,7 +57,6 @@ if __name__ == "__main__":
             # inv_freq are instantiated as parameters
             m.load_state_dict(state_dict, strict=False)
 
-    m = m.to(device)
     m.to_bfloat16_except_pr_lc()
 
     with open(args.input_file, "r") as f:
