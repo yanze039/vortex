@@ -544,8 +544,6 @@ class StripedHyena(nn.Module):
         self.ground_truth_activations_path = config.get("ground_truth_activations_path", None)
         self.logger.info(f"Initializing StripedHyena with config: {config}")
         self.embedding_layer = VocabParallelEmbedding(config)
-        self.norm = RMSNorm(config) if config.get("final_norm", True) else None
-        self.unembed = self.embedding_layer if config.tie_embeddings else VocabParallelEmbedding(config)
 
         if config.get("use_flashfft", "True"):
             try:
@@ -559,9 +557,34 @@ class StripedHyena(nn.Module):
 
         self.logger.info(f"Initializing {config.num_layers} blocks...")
         self.blocks = nn.ModuleList()
+        self.block_idx_to_device = {}
+        device_idx = 0
+
         for layer_idx in tqdm(range(config.num_layers)):
-            self.blocks.append(get_block(config, layer_idx, flash_fft=self.flash_fft))
-            self.logger.info(f"Parameter count for block {layer_idx}: {sum(p.numel() for p in self.blocks[-1].parameters())}")
+            def try_append():
+                device = f"cuda:{device_idx}" if torch.cuda.is_available() else "cpu"
+                with torch.device(device):
+                    self.blocks.append(get_block(config, layer_idx, flash_fft=self.flash_fft))
+                    self.block_idx_to_device[layer_idx] = device
+                    self.logger.info(f"Assigned {layer_idx=} to {device=}")
+            try:
+                try_append()
+            except torch.cuda.OutOfMemoryError:
+                device_idx += 1
+                try_append()
+
+        # It is important to place last layers on the same device as last block.
+        with torch.device(self.block_idx_to_device[config.num_layers-1]):
+            self.norm = RMSNorm(config) if config.get("final_norm", True) else None
+            if device_idx == 0 and config.tie_embeddings:
+                self.unembed = self.embedding_layer
+            else:
+                if config.tie_embeddings:
+                    # Technically we can support this mode, just need to
+                    # copy tensors across GPUs then. But let's implement it
+                    # once/if needed.
+                    self.logger.info("Ignoring tie_embeddings for now.")
+                self.unembed = VocabParallelEmbedding(config)
 
         self.logger.info(f"Initialized model")
 
@@ -592,6 +615,8 @@ class StripedHyena(nn.Module):
             activations_logger.info(f"post norm: {x}, {x.min()}, {x.max(), {self.norm.scale}}")
 
         x = self.unembed.unembed(x)
+        # By convention, we return results on the first device
+        x = x.to(self.block_idx_to_device[0])
         return x, inference_params_dict_out
 
     def block_idx_to_name(self, block_idx):
@@ -640,6 +665,7 @@ class StripedHyena(nn.Module):
                     activation_diff = (x - x_savanna.squeeze()).abs()
                     activations_logger.info(f"pre block {block_idx} activation_diff: {activation_diff.max()}, {activation_diff.mean()}")
 
+            x = x.to(self.block_idx_to_device[block_idx])
             x, _ = block(x, inference_params=None, padding_mask=padding_mask)
             if self.print_activations:
                 activations_logger.info(f"post block {block_idx}: {x}, {x.min()}, {x.max()}")
