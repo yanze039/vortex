@@ -34,6 +34,8 @@ if __name__ == "__main__":
     )
     parser.add_argument("--dry_run", action="store_true", help="Dry run the generation.")
 
+    torch.set_printoptions(precision=2, threshold=5)
+
     torch.manual_seed(1)
     torch.cuda.manual_seed(1)
     args = parser.parse_args()
