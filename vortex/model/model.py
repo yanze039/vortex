@@ -168,7 +168,6 @@ class HyenaCascade(nn.Module):
 
         self.num_systems = self.hyena_filter_groups
         self.channels_per_group = self.hidden_size // self.hyena_filter_groups
-        # self.hidden_size // self.hyena_filter_groups
 
         if self.fir_inner_filter_length:
 

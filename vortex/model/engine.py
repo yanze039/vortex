@@ -26,82 +26,6 @@ IIR_PREFILL_MODES = [
     "iir-fir-caching",
 ]
 
-
-# def fftconv_func(
-#         u, 
-#         k, 
-#         D, 
-#         dropout_mask, 
-#         gelu=True, 
-#         k_rev=None, 
-#         bidirectional=False,
-#         print_activations=False,
-#         groups=None):
-#     seqlen = u.shape[-1]
-#     fft_size = 2 * seqlen
-
-#     # Reshape input and kernel for grouped convolution
-#     print(u.shape)
-#     print(k.shape)
-#     print(groups)
-#     batch_size, channels, seq_len = u.shape
-#     if groups is not None:
-#         channels_per_group = channels // groups
-#         # Reshape to [batch, groups, channels_per_group, seq_len]
-#         u = u.view(batch_size, groups, channels_per_group, seq_len)
-#         k = k.view(groups, channels_per_group, -1)
-
-#     if k.shape[-1] < seqlen:
-#         k_padded = torch.nn.functional.pad(k, (0, seqlen - k.shape[-1]))
-
-#     if bidirectional:
-#         u_f = torch.fft.rfft(u.to(dtype=k.dtype), n=fft_size)
-
-#         k, k2 = k.split(k.shape[1] // 2, dim=1)
-
-#         k_f = torch.fft.rfft(k, n=fft_size) / fft_size
-#         k2_f = torch.fft.rfft(k2, n=fft_size) / fft_size
-
-#         if len(u.shape) > 3:
-#             k_f = k_f.unsqueeze(1)
-#             k2_f = k2_f.unsqueeze(1)
-
-#         y1 = u_f * k_f
-#         y2 = u_f.conj() * k2_f.conj()
-
-#         y = torch.fft.irfft(y1 + y2, n=fft_size, norm="forward")[..., :seqlen]
-
-#     else:
-#         k_f = torch.fft.rfft(k, n=fft_size) / fft_size
-#         if k_rev is not None:
-#             k_rev_f = torch.fft.rfft(k_rev, n=fft_size) / fft_size
-#             k_f = k_f + k_rev_f.conj()
-
-#         u_f = torch.fft.rfft(u.to(dtype=k.dtype), n=fft_size)
-
-#         if len(u.shape) > 3:
-#             k_f = k_f.unsqueeze(1)
-
-#         y = torch.fft.irfft(u_f * k_f, n=fft_size, norm="forward")[..., :seqlen]
-
-#     # Reshape back if using groups
-#     if groups is not None:
-#         print(y.shape)
-#         y = y.view(batch_size, channels, seq_len)
-#         y = y.view(batch_size, channels, seq_len)  # [1, 4096, 4]
-
-#     if print_activations: activations_logger.info(f"post fftconv pre bias {y} {y.min()} {y.max()}")
-
-#     out = y + u * D.unsqueeze(-1)
-
-#     if print_activations: activations_logger.info(f"post fftconv post bias {out} {out.min()} {out.max()}")
-
-#     if gelu:
-#         out = F.gelu(out)
-#     if dropout_mask is not None:
-#         return (out * rearrange(dropout_mask, "b H -> b H 1")).to(dtype=u.dtype)
-#     else:
-#         return out.to(dtype=u.dtype)
     
 def fftconv_func(
         u, 
@@ -488,9 +412,6 @@ class HyenaInferenceEngine:
             h0 = h0.squeeze(-1)
         
         fir_sum = torch.sum(fir_state * h, dim=-1)
-        if h0.shape[-1] != fir_sum.shape[-1]:
-            import pdb
-            pdb.set_trace()
 
         y = h0 * u + torch.sum(fir_state * h.squeeze(-2), dim=-1) 
         if bias is not None:
