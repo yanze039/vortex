@@ -102,11 +102,12 @@ class HyenaCascade(nn.Module):
     def __init__(self, 
             config, 
             layer_idx,
+            hyena_filter_groups=None,
             fir_inner_filter_length=None) -> None:
         super().__init__()
         self.config = config
         self.layer_idx = layer_idx
-        self.hyena_filter_groups = config.get("hyena_filter_groups", self.config.hidden_size)
+        self.hyena_filter_groups = hyena_filter_groups
         self.print_activations = config.get("print_activations", False)
         self.ground_truth_activations_path = config.get("ground_truth_activations_path", None)
 
@@ -165,14 +166,16 @@ class HyenaCascade(nn.Module):
         if self.long_fir_threshold is not None:
             assert self.use_flashfft is False, "long_fir_threshold not compatible with fused flashfft"
 
-        self.num_systems = self.hidden_size // self.hyena_filter_groups
+        self.num_systems = self.hyena_filter_groups
+        self.channels_per_group = self.hidden_size // self.hyena_filter_groups
+        # self.hidden_size // self.hyena_filter_groups
 
         if self.fir_inner_filter_length:
 
-            self.h = nn.Parameter(torch.randn(self.num_systems, 1, fir_inner_filter_length))
+            self.h = nn.Parameter(torch.randn(self.hyena_filter_groups, 1, fir_inner_filter_length))
 
             if fir_inner_filter_length >= 128:
-                self.D = nn.Parameter(torch.zeros(self.hidden_size))
+                self.D = nn.Parameter(torch.zeros(self.hyena_filter_groups))
 
             if fir_inner_filter_length < 128:
                 self.D = None
@@ -230,7 +233,7 @@ class HyenaCascade(nn.Module):
             h, _, _, _ = self.compute_filter(L, u.device)
         else:
             h = self.h
-
+        
         if self.hyena_filter_groups > 1:
             h = h.repeat_interleave(self.hidden_size // self.hyena_filter_groups, 1)
         
@@ -253,6 +256,7 @@ class HyenaCascade(nn.Module):
                 fir_length=self.fir_inner_filter_length,
                 inference_params=inference_params,
                 padding_mask=padding_mask,
+                groups=self.hyena_filter_groups,
             )
             if self.print_activations:
                 activations_logger.info(f"post 2 parallel fir: {y}, {y.min()}, {y.max()}")
@@ -324,7 +328,7 @@ class HyenaCascade(nn.Module):
                 self.residues,
                 self.poles,
                 inference_params.state_dict[self.layer_idx],
-                iir_groups=self.hyena_filter_groups,
+                iir_groups=self.hidden_size // self.hyena_filter_groups,
             )
             inference_params.state_dict[self.layer_idx] = iir_state
 
@@ -359,6 +363,7 @@ class ParallelGatedConvBlock(nn.Module):
     def __init__(self, 
             config, 
             layer_idx,
+            hyena_filter_groups=None,
             fir_inner_filter_length=None) -> None:
         super().__init__()
         self.config = config
@@ -367,10 +372,11 @@ class ParallelGatedConvBlock(nn.Module):
         self.ground_truth_activations_path = config.get("ground_truth_activations_path", None)
         self.low_mem_mode = config.get("low_mem_mode", False)
         self.fir_inner_filter_length = fir_inner_filter_length
+        self.hyena_filter_groups = hyena_filter_groups if hyena_filter_groups is not None else config.hidden_size
         dtype = config.get("hyena_block_dtype", torch.bfloat16)
         mlp_dtype = config.get("mlp_dtype", torch.bfloat16)
         self.pre_norm, self.post_norm = RMSNorm(config).to(dtype=dtype), RMSNorm(config).to(dtype=dtype)
-        self.filter = HyenaCascade(config, layer_idx, fir_inner_filter_length=fir_inner_filter_length).to(dtype=dtype)
+        self.filter = HyenaCascade(config, layer_idx, hyena_filter_groups=self.hyena_filter_groups, fir_inner_filter_length=fir_inner_filter_length).to(dtype=dtype)
         self.projections = nn.Linear(config.hidden_size, 3 * config.hidden_size, bias=config.qkv_proj_bias)
         self.out_filter_dense = nn.Linear(config.hidden_size, config.hidden_size, bias=config.hyena_out_proj_bias).to(dtype)
         self.mlp = ParallelGatedMLP(config, layer_idx).to(dtype=mlp_dtype)
@@ -428,7 +434,6 @@ class ParallelGatedConvBlock(nn.Module):
                 z_savanna = torch.load(f"{self.ground_truth_activations_path}/pre_filter_{self.layer_idx}.pt")
                 activation_diff = (z - z_savanna.squeeze()).abs()
                 activations_logger.info(f"pre filter activation_diff: {activation_diff.max()}, {activation_diff.mean()}")
-
         z, inference_params = self.filter(z, inference_params=inference_params, padding_mask=padding_mask)
         
         if self.print_activations:
@@ -466,10 +471,10 @@ def get_block(config, layer_idx, flash_fft=None):
         return block
     elif layer_idx in config.hcm_layer_idxs:
         block = ParallelGatedConvBlock(
-            config, layer_idx, fir_inner_filter_length=config.hcm_filter_length)
+            config, layer_idx, hyena_filter_groups=config.hcm_filter_groups, fir_inner_filter_length=config.hcm_filter_length)
         return block
     elif layer_idx in config.hcs_layer_idxs:
-        block = ParallelGatedConvBlock(config, layer_idx, fir_inner_filter_length=config.hcs_filter_length)
+        block = ParallelGatedConvBlock(config, layer_idx, hyena_filter_groups=config.hcs_filter_groups, fir_inner_filter_length=config.hcs_filter_length)
         return block
     else:
         raise NotImplementedError

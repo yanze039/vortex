@@ -27,6 +27,82 @@ IIR_PREFILL_MODES = [
 ]
 
 
+# def fftconv_func(
+#         u, 
+#         k, 
+#         D, 
+#         dropout_mask, 
+#         gelu=True, 
+#         k_rev=None, 
+#         bidirectional=False,
+#         print_activations=False,
+#         groups=None):
+#     seqlen = u.shape[-1]
+#     fft_size = 2 * seqlen
+
+#     # Reshape input and kernel for grouped convolution
+#     print(u.shape)
+#     print(k.shape)
+#     print(groups)
+#     batch_size, channels, seq_len = u.shape
+#     if groups is not None:
+#         channels_per_group = channels // groups
+#         # Reshape to [batch, groups, channels_per_group, seq_len]
+#         u = u.view(batch_size, groups, channels_per_group, seq_len)
+#         k = k.view(groups, channels_per_group, -1)
+
+#     if k.shape[-1] < seqlen:
+#         k_padded = torch.nn.functional.pad(k, (0, seqlen - k.shape[-1]))
+
+#     if bidirectional:
+#         u_f = torch.fft.rfft(u.to(dtype=k.dtype), n=fft_size)
+
+#         k, k2 = k.split(k.shape[1] // 2, dim=1)
+
+#         k_f = torch.fft.rfft(k, n=fft_size) / fft_size
+#         k2_f = torch.fft.rfft(k2, n=fft_size) / fft_size
+
+#         if len(u.shape) > 3:
+#             k_f = k_f.unsqueeze(1)
+#             k2_f = k2_f.unsqueeze(1)
+
+#         y1 = u_f * k_f
+#         y2 = u_f.conj() * k2_f.conj()
+
+#         y = torch.fft.irfft(y1 + y2, n=fft_size, norm="forward")[..., :seqlen]
+
+#     else:
+#         k_f = torch.fft.rfft(k, n=fft_size) / fft_size
+#         if k_rev is not None:
+#             k_rev_f = torch.fft.rfft(k_rev, n=fft_size) / fft_size
+#             k_f = k_f + k_rev_f.conj()
+
+#         u_f = torch.fft.rfft(u.to(dtype=k.dtype), n=fft_size)
+
+#         if len(u.shape) > 3:
+#             k_f = k_f.unsqueeze(1)
+
+#         y = torch.fft.irfft(u_f * k_f, n=fft_size, norm="forward")[..., :seqlen]
+
+#     # Reshape back if using groups
+#     if groups is not None:
+#         print(y.shape)
+#         y = y.view(batch_size, channels, seq_len)
+#         y = y.view(batch_size, channels, seq_len)  # [1, 4096, 4]
+
+#     if print_activations: activations_logger.info(f"post fftconv pre bias {y} {y.min()} {y.max()}")
+
+#     out = y + u * D.unsqueeze(-1)
+
+#     if print_activations: activations_logger.info(f"post fftconv post bias {out} {out.min()} {out.max()}")
+
+#     if gelu:
+#         out = F.gelu(out)
+#     if dropout_mask is not None:
+#         return (out * rearrange(dropout_mask, "b H -> b H 1")).to(dtype=u.dtype)
+#     else:
+#         return out.to(dtype=u.dtype)
+    
 def fftconv_func(
         u, 
         k, 
@@ -35,49 +111,57 @@ def fftconv_func(
         gelu=True, 
         k_rev=None, 
         bidirectional=False,
-        print_activations=False):
+        print_activations=False,
+        groups=None):
     seqlen = u.shape[-1]
     fft_size = 2 * seqlen
 
+    print("Input shapes:")
+    print(f"u: {u.shape}")  # Should be [1, 4096, 4]
+    print(f"k: {k.shape}")  # Should be [256, 16, 4]
+    print(f"groups: {groups}")  # Should be 256
 
-    if k.shape[-1] < seqlen:
-        k_padded = torch.nn.functional.pad(k, (0, seqlen - k.shape[-1]))
+    # Reshape input and kernel for grouped convolution
+    batch_size, channels, seq_len = u.shape
+    if groups is not None:
+        channels_per_group = channels // groups
+        # Reshape to [batch, groups, channels_per_group, seq_len]
+        u = u.view(batch_size, groups, channels_per_group, seq_len)
+        D = D.repeat_interleave(channels_per_group)
+        print(f"After reshape u: {u.shape}")  # Should be [1, 256, 16, 4]
 
-    if bidirectional:
-        u_f = torch.fft.rfft(u.to(dtype=k.dtype), n=fft_size)
-
-        k, k2 = k.split(k.shape[1] // 2, dim=1)
-
-        k_f = torch.fft.rfft(k, n=fft_size) / fft_size
-        k2_f = torch.fft.rfft(k2, n=fft_size) / fft_size
-
-        if len(u.shape) > 3:
-            k_f = k_f.unsqueeze(1)
-            k2_f = k2_f.unsqueeze(1)
-
-        y1 = u_f * k_f
-        y2 = u_f.conj() * k2_f.conj()
-
-        y = torch.fft.irfft(y1 + y2, n=fft_size, norm="forward")[..., :seqlen]
-
-    else:
+    if not bidirectional:
         k_f = torch.fft.rfft(k, n=fft_size) / fft_size
         if k_rev is not None:
             k_rev_f = torch.fft.rfft(k_rev, n=fft_size) / fft_size
             k_f = k_f + k_rev_f.conj()
 
         u_f = torch.fft.rfft(u.to(dtype=k.dtype), n=fft_size)
+        print(f"u_f shape: {u_f.shape}")
+        print(f"k_f shape: {k_f.shape}")
 
-        if len(u.shape) > 3:
-            k_f = k_f.unsqueeze(1)
+        y = torch.fft.irfft(u_f * k_f.unsqueeze(0), n=fft_size, norm="forward")[..., :seqlen]
+        print(f"y shape before reshape: {y.shape}")
 
-        y = torch.fft.irfft(u_f * k_f, n=fft_size, norm="forward")[..., :seqlen]
+        # Reshape back if using groups
+        if groups is not None:
+            y = y.view(batch_size, channels, seq_len)
+            print(f"y final shape: {y.shape}")  # Should be [1, 4096, 4]
 
-    if print_activations: activations_logger.info(f"post fftconv pre bias {y} {y.min()} {y.max()}")
-
+    if print_activations: 
+        activations_logger.info(f"post fftconv pre bias {y} {y.min()} {y.max()}")
+    if groups is not None:
+        print(u.shape)
+        print(y.shape)
+        y = y.view(batch_size, channels, seq_len)
+        u = u.view(batch_size, channels, seq_len)
+    print(u.shape)
+    print(y.shape)
+    print(D.shape)
     out = y + u * D.unsqueeze(-1)
 
-    if print_activations: activations_logger.info(f"post fftconv post bias {out} {out.min()} {out.max()}")
+    if print_activations: 
+        activations_logger.info(f"post fftconv post bias {out} {out.min()} {out.max()}")
 
     if gelu:
         out = F.gelu(out)
@@ -85,8 +169,6 @@ def fftconv_func(
         return (out * rearrange(dropout_mask, "b H -> b H 1")).to(dtype=u.dtype)
     else:
         return out.to(dtype=u.dtype)
-    
-
 
 def canonicalize_modal_system(poles, residues):
     """Canonicalize a modal system.
@@ -139,6 +221,7 @@ class HyenaInferenceEngine:
         bias,
         L,
         dims,
+        groups=None,
         gated_bias=False,
         column_split_hyena=False,
         dim_last=True,
@@ -156,7 +239,6 @@ class HyenaInferenceEngine:
                 x2, x1, v = column_split(u, num_attention_heads, hidden_size_per_attention_head)
             else:
                 x2, x1, v = u.split([hidden_size, hidden_size, hidden_size], dim=1)
-
             u = x1 * v
 
             if self.print_activations:  
@@ -175,26 +257,34 @@ class HyenaInferenceEngine:
             with torch.autocast("cuda"):
                 z = fftconv_func(
                     u.to(torch.float32),
-                    weight[:,0,:L].to(torch.float32),
+                    weight[:,:,:L].to(torch.float32),
                     bias,
                     None,
                     gelu=False,
                     bidirectional=False,
                     print_activations=self.print_activations,
+                    groups=groups,
                 )
                 z = z.to(u.dtype)
         else:
             if dim_last:
                 u = u.permute(0, 2, 1)  # B, D, L
-
+                
+            if groups is None:
+                g = u.shape[1]
+            else:
+                g = groups
+            
             z = fir_fn(
                 u.to(torch.float32),
                 weight.to(torch.float32),
                 bias=None,  
                 stride=1,
                 padding=fir_length - 1,
-                groups=u.shape[1],
+                groups=g,
             )[..., :L]
+            if z.shape[1] != u.shape[1] and groups is not None:
+                z = z.repeat_interleave(u.shape[1] // groups, dim=1)
             z = z.to(u.dtype)
 
             if gated_bias is False:
