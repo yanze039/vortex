@@ -116,11 +116,6 @@ def fftconv_func(
     seqlen = u.shape[-1]
     fft_size = 2 * seqlen
 
-    print("Input shapes:")
-    print(f"u: {u.shape}")  # Should be [1, 4096, 4]
-    print(f"k: {k.shape}")  # Should be [256, 16, 4]
-    print(f"groups: {groups}")  # Should be 256
-
     # Reshape input and kernel for grouped convolution
     batch_size, channels, seq_len = u.shape
     if groups is not None:
@@ -128,7 +123,6 @@ def fftconv_func(
         # Reshape to [batch, groups, channels_per_group, seq_len]
         u = u.view(batch_size, groups, channels_per_group, seq_len)
         D = D.repeat_interleave(channels_per_group)
-        print(f"After reshape u: {u.shape}")  # Should be [1, 256, 16, 4]
 
     if not bidirectional:
         k_f = torch.fft.rfft(k, n=fft_size) / fft_size
@@ -137,27 +131,18 @@ def fftconv_func(
             k_f = k_f + k_rev_f.conj()
 
         u_f = torch.fft.rfft(u.to(dtype=k.dtype), n=fft_size)
-        print(f"u_f shape: {u_f.shape}")
-        print(f"k_f shape: {k_f.shape}")
 
         y = torch.fft.irfft(u_f * k_f.unsqueeze(0), n=fft_size, norm="forward")[..., :seqlen]
-        print(f"y shape before reshape: {y.shape}")
 
         # Reshape back if using groups
         if groups is not None:
             y = y.view(batch_size, channels, seq_len)
-            print(f"y final shape: {y.shape}")  # Should be [1, 4096, 4]
 
     if print_activations: 
         activations_logger.info(f"post fftconv pre bias {y} {y.min()} {y.max()}")
     if groups is not None:
-        print(u.shape)
-        print(y.shape)
         y = y.view(batch_size, channels, seq_len)
         u = u.view(batch_size, channels, seq_len)
-    print(u.shape)
-    print(y.shape)
-    print(D.shape)
     out = y + u * D.unsqueeze(-1)
 
     if print_activations: 
@@ -484,15 +469,30 @@ class HyenaInferenceEngine:
         `fir_state` contains the last `short_filter_length - 1` elements of `u`: `u_(L-2), u_{L-1), ...`
         We assume dimensions of `short_filter_weight` to be `[d, 1, short_filter_len]`.
         """
-        h0, h = weight[..., 0, -1], weight[..., 0, :-1]
+        h0, h = weight[..., :, -1], weight[..., :, :-1]
         h0, h = h0[None], h[None]
 
         # We have to explicitly handle the cases where input prompts are shorter than the FIR state length
-        h = h[..., :fir_state.shape[-1]]
+        h = h[..., :, :fir_state.shape[-1]]
         if flip_filter:
             h = h.flip(-1)
 
-        y = h0 * u + torch.sum(fir_state * h, dim=-1) 
+        if h.shape[1] != u.shape[1]: #handle grouped convolutions
+            groups = u.shape[1] // h.shape[1]
+            h0 = h0.repeat_interleave(groups, dim=1)
+            h = h.repeat_interleave(groups, dim=1)
+            if bias is not None:
+                bias = bias.repeat_interleave(groups, dim=0)
+
+        if h0.shape[-1] != u.shape[-1] and h0.shape[-1] == 1:
+            h0 = h0.squeeze(-1)
+        
+        fir_sum = torch.sum(fir_state * h, dim=-1)
+        if h0.shape[-1] != fir_sum.shape[-1]:
+            import pdb
+            pdb.set_trace()
+
+        y = h0 * u + torch.sum(fir_state * h.squeeze(-2), dim=-1) 
         if bias is not None:
             if gated_bias:
                 y += bias * u
