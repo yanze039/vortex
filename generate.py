@@ -57,6 +57,8 @@ if __name__ == "__main__":
     m = m.to(device)
     m.to_bfloat16_except_pr_lc()
 
+    print_rank_0(f"Number of parameters: {sum(p.numel() for p in m.parameters())}")
+
     with open(args.input_file, "r") as f:
         input_string = f.read()
     print_rank_0(f"Prompt: {input_string}", end="\n\n")
