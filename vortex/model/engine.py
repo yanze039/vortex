@@ -26,7 +26,7 @@ IIR_PREFILL_MODES = [
     "iir-fir-caching",
 ]
 
-
+    
 def fftconv_func(
         u, 
         k, 
@@ -35,13 +35,18 @@ def fftconv_func(
         gelu=True, 
         k_rev=None, 
         bidirectional=False,
-        print_activations=False):
+        print_activations=False,
+        groups=None):
     seqlen = u.shape[-1]
     fft_size = 2 * seqlen
 
-
-    if k.shape[-1] < seqlen:
-        k_padded = torch.nn.functional.pad(k, (0, seqlen - k.shape[-1]))
+    # Reshape input and kernel for grouped convolution
+    batch_size, channels, seq_len = u.shape
+    if groups is not None:
+        channels_per_group = channels // groups
+        # Reshape to [batch, groups, channels_per_group, seq_len]
+        u = u.view(batch_size, groups, channels_per_group, seq_len)
+        D = D.repeat_interleave(channels_per_group)
 
     if bidirectional:
         u_f = torch.fft.rfft(u.to(dtype=k.dtype), n=fft_size)
@@ -68,16 +73,25 @@ def fftconv_func(
 
         u_f = torch.fft.rfft(u.to(dtype=k.dtype), n=fft_size)
 
+
         if len(u.shape) > 3:
-            k_f = k_f.unsqueeze(1)
+            k_f = k_f.unsqueeze(0)
 
         y = torch.fft.irfft(u_f * k_f, n=fft_size, norm="forward")[..., :seqlen]
 
-    if print_activations: activations_logger.info(f"post fftconv pre bias {y} {y.min()} {y.max()}")
+        # Reshape back if using groups
+        if groups is not None:
+            y = y.view(batch_size, channels, seq_len)
 
+    if print_activations: 
+        activations_logger.info(f"post fftconv pre bias {y} {y.min()} {y.max()}")
+    if groups is not None:
+        y = y.view(batch_size, channels, seq_len)
+        u = u.view(batch_size, channels, seq_len)
     out = y + u * D.unsqueeze(-1)
 
-    if print_activations: activations_logger.info(f"post fftconv post bias {out} {out.min()} {out.max()}")
+    if print_activations: 
+        activations_logger.info(f"post fftconv post bias {out} {out.min()} {out.max()}")
 
     if gelu:
         out = F.gelu(out)
@@ -85,8 +99,6 @@ def fftconv_func(
         return (out * rearrange(dropout_mask, "b H -> b H 1")).to(dtype=u.dtype)
     else:
         return out.to(dtype=u.dtype)
-    
-
 
 def canonicalize_modal_system(poles, residues):
     """Canonicalize a modal system.
@@ -139,6 +151,7 @@ class HyenaInferenceEngine:
         bias,
         L,
         dims,
+        groups=None,
         gated_bias=False,
         column_split_hyena=False,
         dim_last=True,
@@ -156,7 +169,6 @@ class HyenaInferenceEngine:
                 x2, x1, v = column_split(u, num_attention_heads, hidden_size_per_attention_head)
             else:
                 x2, x1, v = u.split([hidden_size, hidden_size, hidden_size], dim=1)
-
             u = x1 * v
 
             if self.print_activations:  
@@ -175,26 +187,34 @@ class HyenaInferenceEngine:
             with torch.autocast("cuda"):
                 z = fftconv_func(
                     u.to(torch.float32),
-                    weight[:,0,:L].to(torch.float32),
+                    weight[:,:,:L].to(torch.float32),
                     bias,
                     None,
                     gelu=False,
                     bidirectional=False,
                     print_activations=self.print_activations,
+                    groups=groups,
                 )
                 z = z.to(u.dtype)
         else:
             if dim_last:
                 u = u.permute(0, 2, 1)  # B, D, L
-
+                
+            if groups is None:
+                g = u.shape[1]
+            else:
+                g = groups
+            
             z = fir_fn(
                 u.to(torch.float32),
                 weight.to(torch.float32),
                 bias=None,  
                 stride=1,
                 padding=fir_length - 1,
-                groups=u.shape[1],
+                groups=g,
             )[..., :L]
+            if z.shape[1] != u.shape[1] and groups is not None:
+                z = z.repeat_interleave(u.shape[1] // groups, dim=1)
             z = z.to(u.dtype)
 
             if gated_bias is False:
@@ -394,15 +414,27 @@ class HyenaInferenceEngine:
         `fir_state` contains the last `short_filter_length - 1` elements of `u`: `u_(L-2), u_{L-1), ...`
         We assume dimensions of `short_filter_weight` to be `[d, 1, short_filter_len]`.
         """
-        h0, h = weight[..., 0, -1], weight[..., 0, :-1]
+        h0, h = weight[..., :, -1], weight[..., :, :-1]
         h0, h = h0[None], h[None]
 
         # We have to explicitly handle the cases where input prompts are shorter than the FIR state length
-        h = h[..., :fir_state.shape[-1]]
+        h = h[..., :, :fir_state.shape[-1]]
         if flip_filter:
             h = h.flip(-1)
 
-        y = h0 * u + torch.sum(fir_state * h, dim=-1) 
+        if h.shape[1] != u.shape[1]: #handle grouped convolutions
+            groups = u.shape[1] // h.shape[1]
+            h0 = h0.repeat_interleave(groups, dim=1)
+            h = h.repeat_interleave(groups, dim=1)
+            if bias is not None:
+                bias = bias.repeat_interleave(groups, dim=0)
+
+        if h0.shape[-1] != u.shape[-1] and h0.shape[-1] == 1:
+            h0 = h0.squeeze(-1)
+        
+        fir_sum = torch.sum(fir_state * h, dim=-1)
+
+        y = h0 * u + torch.sum(fir_state * h.squeeze(-2), dim=-1) 
         if bias is not None:
             if gated_bias:
                 y += bias * u
