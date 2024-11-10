@@ -501,6 +501,7 @@ class StripedHyena(nn.Module):
         self.blocks = nn.ModuleList()
         for layer_idx in tqdm(range(config.num_layers)):
             self.blocks.append(get_block(config, layer_idx, flash_fft=self.flash_fft))
+            self.logger.info(f"Parameter count for block {layer_idx}: {sum(p.numel() for p in self.blocks[-1].parameters())}")
 
         self.logger.info(f"Initialized model")
 

@@ -53,6 +53,8 @@ class Generator:
             input = input_ids
         x = input
 
+        print(input_string, input)
+
         if max_seqlen is not None:
             x = x[:, -max_seqlen:]
 
