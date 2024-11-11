@@ -118,6 +118,7 @@ class HyenaCascade(nn.Module):
         self.inference_mode = config.get("inference_mode", True)
         self.counter = 0
         self.column_split_hyena = config.get("column_split_hyena", True)
+        self.hyena_flip_x1x2 = config.get("hyena_flip_x1x2", False)
 
         assert self.hidden_size % self.num_filters == 0 and self.num_filters <= self.hidden_size
 
@@ -136,7 +137,8 @@ class HyenaCascade(nn.Module):
         self.engine = HyenaInferenceEngine(
             layer_idx=layer_idx, 
             ground_truth_activations_path=self.ground_truth_activations_path,
-            print_activations=self.print_activations
+            print_activations=self.print_activations,
+            hyena_flip_x1x2=config.get("hyena_flip_x1x2", False)
         )
         self.use_flash_depthwise = config.get("use_flash_depthwise", False)
         self.data_dtype = None
@@ -233,8 +235,11 @@ class HyenaCascade(nn.Module):
         else:
             h = self.h
         
+        D = self.D
         if self.hyena_filter_groups > 1:
-            h = h.repeat_interleave(self.hidden_size // self.hyena_filter_groups, 1)
+            h = h.repeat_interleave(self.hidden_size // self.hyena_filter_groups, 0)
+            if D is not None:
+                D = D.repeat_interleave(self.hidden_size // self.hyena_filter_groups)
         
         # if inference_params is not None, we plan to perform generation:
         # prefilling is handled by the engine.
@@ -245,7 +250,7 @@ class HyenaCascade(nn.Module):
                 self.fir_inner_fn,
                 z_pre,
                 h,
-                self.D,
+                D,
                 L,
                 dims=dims,
                 gate=True,
@@ -268,7 +273,7 @@ class HyenaCascade(nn.Module):
             y = self.engine.parallel_iir(
                 z_pre,
                 h,
-                self.D,
+                D,
                 L,
                 t=self.t,
                 poles=self.poles,
@@ -306,6 +311,9 @@ class HyenaCascade(nn.Module):
             if self.column_split_hyena
             else z_pre.split([self.hidden_size, self.hidden_size, self.hidden_size], dim=1)
         )
+
+        if self.hyena_flip_x1x2:
+            x1, x2 = x2, x1
 
         if self.fir_inner_filter_length is not None:
             y, fir_inner_state = self.engine.step_fir(
@@ -591,8 +599,7 @@ class StripedHyena(nn.Module):
                 if self.ground_truth_activations_path:
                     x_savanna = torch.load(f"{self.ground_truth_activations_path}/post_block_{block_idx}.pt")
                     activation_diff = (x - x_savanna.squeeze()).abs()
-
-                activations_logger.info(f"post block {block_idx} activation_diff: {activation_diff.max()}, {activation_diff.mean()}")
+                    activations_logger.info(f"post block {block_idx} activation_diff: {activation_diff.max()}, {activation_diff.mean()}")
 
         return x, None
 
@@ -667,7 +674,10 @@ class StripedHyena(nn.Module):
             for layer_idx, block in enumerate(self.blocks):
                 if type(block) == AttentionBlock:
                     Wqkv = state_dict[f"blocks.{layer_idx}.inner_mha_cls.Wqkv.weight"]
-                    bias = state_dict[f"blocks.{layer_idx}.inner_mha_cls.Wqkv.bias"]
+                    try:
+                        bias = state_dict[f"blocks.{layer_idx}.inner_mha_cls.Wqkv.bias"]
+                    except:
+                        bias = None
 
                     size_att_head = block.hidden_size_per_attention_head
 

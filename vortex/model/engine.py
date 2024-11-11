@@ -26,7 +26,20 @@ IIR_PREFILL_MODES = [
     "iir-fir-caching",
 ]
 
-    
+
+def adjust_filter_shape_for_broadcast(u, h):
+    h = h.squeeze() # Standardize to [D, L] from [1, D, L] and [D, 1, L]
+
+    # Case: u: [B, D, L], k_f: [D, L]
+    if len(u.shape) > len(h.shape):
+        h = h.unsqueeze(0) 
+
+    # Case: u: [B, D1, D2, L], k_f: [B, D, L]
+    if len(u.shape) > 3:
+        h = h.unsqueeze(1)
+    return h
+
+
 def fftconv_func(
         u, 
         k, 
@@ -36,58 +49,36 @@ def fftconv_func(
         k_rev=None, 
         bidirectional=False,
         print_activations=False,
-        groups=None):
+        **kwargs
+    ):
     seqlen = u.shape[-1]
     fft_size = 2 * seqlen
 
-    # Reshape input and kernel for grouped convolution
-    batch_size, channels, seq_len = u.shape
-    if groups is not None:
-        channels_per_group = channels // groups
-        # Reshape to [batch, groups, channels_per_group, seq_len]
-        u = u.view(batch_size, groups, channels_per_group, seq_len)
-        D = D.repeat_interleave(channels_per_group)
+    k_f = torch.fft.rfft(k, n=fft_size) / fft_size
+    k_f = adjust_filter_shape_for_broadcast(u, k_f)
+    k = k.squeeze()
 
     if bidirectional:
         u_f = torch.fft.rfft(u.to(dtype=k.dtype), n=fft_size)
-
-        k, k2 = k.split(k.shape[1] // 2, dim=1)
-
-        k_f = torch.fft.rfft(k, n=fft_size) / fft_size
+        k, k2 = k.split(k.shape[1] // 2, dim=1)    
         k2_f = torch.fft.rfft(k2, n=fft_size) / fft_size
-
-        if len(u.shape) > 3:
-            k_f = k_f.unsqueeze(1)
-            k2_f = k2_f.unsqueeze(1)
-
         y1 = u_f * k_f
         y2 = u_f.conj() * k2_f.conj()
 
         y = torch.fft.irfft(y1 + y2, n=fft_size, norm="forward")[..., :seqlen]
 
     else:
-        k_f = torch.fft.rfft(k, n=fft_size) / fft_size
         if k_rev is not None:
             k_rev_f = torch.fft.rfft(k_rev, n=fft_size) / fft_size
             k_f = k_f + k_rev_f.conj()
 
         u_f = torch.fft.rfft(u.to(dtype=k.dtype), n=fft_size)
 
-
-        if len(u.shape) > 3:
-            k_f = k_f.unsqueeze(0)
-
         y = torch.fft.irfft(u_f * k_f, n=fft_size, norm="forward")[..., :seqlen]
-
-        # Reshape back if using groups
-        if groups is not None:
-            y = y.view(batch_size, channels, seq_len)
 
     if print_activations: 
         activations_logger.info(f"post fftconv pre bias {y} {y.min()} {y.max()}")
-    if groups is not None:
-        y = y.view(batch_size, channels, seq_len)
-        u = u.view(batch_size, channels, seq_len)
+
     out = y + u * D.unsqueeze(-1)
 
     if print_activations: 
@@ -134,6 +125,7 @@ class HyenaInferenceEngine:
         layer_idx=None,
         ground_truth_activations_path=None,
         print_activations=False,
+        hyena_flip_x1x2=False,
     ) -> None:
         self.fir_fn = fir_fn
         assert iir_prefill_style in IIR_PREFILL_MODES, f"iir_prefill_style must be one of {IIR_PREFILL_MODES}"
@@ -142,6 +134,7 @@ class HyenaInferenceEngine:
         self.low_mem_mode = False
         self.ground_truth_activations_path = ground_truth_activations_path
         self.print_activations = print_activations
+        self.hyena_flip_x1x2 = hyena_flip_x1x2
 
     def parallel_fir(
         self,
@@ -169,12 +162,16 @@ class HyenaInferenceEngine:
                 x2, x1, v = column_split(u, num_attention_heads, hidden_size_per_attention_head)
             else:
                 x2, x1, v = u.split([hidden_size, hidden_size, hidden_size], dim=1)
+            if self.hyena_flip_x1x2:
+                x1, x2 = x2, x1
             u = x1 * v
 
             if self.print_activations:  
                 activations_logger.info(f"q: {x2}, {x2.min()}, {x2.max()}")
                 activations_logger.info(f"k: {x1}, {x1.min()}, {x1.max()}")
                 activations_logger.info(f"v: {v}, {v.min()}, {v.max()}")
+                activations_logger.info(f"pre hyena gate: {u}, {u.min()}, {u.max()}")
+                
 
         # prepare input layout, dimensions and dispatch to fir kernel
         # Deprecated
@@ -211,10 +208,9 @@ class HyenaInferenceEngine:
                 bias=None,  
                 stride=1,
                 padding=fir_length - 1,
-                groups=g,
+                groups=u.shape[1], # always set to D, regardless of filter grouping
             )[..., :L]
-            if z.shape[1] != u.shape[1] and groups is not None:
-                z = z.repeat_interleave(u.shape[1] // groups, dim=1)
+
             z = z.to(u.dtype)
 
             if gated_bias is False:
@@ -314,8 +310,10 @@ class HyenaInferenceEngine:
             )
         else:
             x2, x1, v = z_pre.split([hidden_size, hidden_size, hidden_size], dim=1)
+        
+        if self.hyena_flip_x1x2:
+            x1, x2 = x2, x1
 
-        # oint()
         x1v = x1 * v
 
         if inference_params is not None and prefill_style == "recurrence":
@@ -414,27 +412,16 @@ class HyenaInferenceEngine:
         `fir_state` contains the last `short_filter_length - 1` elements of `u`: `u_(L-2), u_{L-1), ...`
         We assume dimensions of `short_filter_weight` to be `[d, 1, short_filter_len]`.
         """
-        h0, h = weight[..., :, -1], weight[..., :, :-1]
+        h0, h = weight[..., 0, -1], weight[..., 0, :-1]
         h0, h = h0[None], h[None]
 
         # We have to explicitly handle the cases where input prompts are shorter than the FIR state length
-        h = h[..., :, :fir_state.shape[-1]]
+        h = h[..., :fir_state.shape[-1]]
         if flip_filter:
             h = h.flip(-1)
-
-        if h.shape[1] != u.shape[1]: #handle grouped convolutions
-            groups = u.shape[1] // h.shape[1]
-            h0 = h0.repeat_interleave(groups, dim=1)
-            h = h.repeat_interleave(groups, dim=1)
-            if bias is not None:
-                bias = bias.repeat_interleave(groups, dim=0)
-
-        if h0.shape[-1] != u.shape[-1] and h0.shape[-1] == 1:
-            h0 = h0.squeeze(-1)
         
-        fir_sum = torch.sum(fir_state * h, dim=-1)
+        y = h0 * u + torch.sum(fir_state * h, dim=-1)  
 
-        y = h0 * u + torch.sum(fir_state * h.squeeze(-2), dim=-1) 
         if bias is not None:
             if gated_bias:
                 y += bias * u

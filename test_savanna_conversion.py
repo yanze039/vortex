@@ -35,12 +35,10 @@ if __name__ == "__main__":
     else:
         tokenizer = HFAutoTokenizer(config.vocab_file)
     
-
-    device = torch.device("cuda")
     config.cached_generation = False 
-
-    m = StripedHyena(config)
-    
+    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+    with torch.device(device):
+        m = StripedHyena(config)
 
     if args.checkpoint_path:
         state_dict = torch.load(args.checkpoint_path, map_location=device)
@@ -63,8 +61,10 @@ if __name__ == "__main__":
     inputs = torch.tensor(inputs, dtype=torch.long, device=device)[None]
 
     logits_vortex = m.forward(inputs)
+    breakpoint()
 
-    # logits_garyk = torch.load('/home/gbrixi/dnagen/eval/bin/evo2_7b_ACTG.pt', map_location=device)
+    #logits_garyk = torch.load('/home/gbrixi/dnagen/eval/bin/evo2_7b_ACTG.pt', map_location=device)
+
 
     # print(logits_vortex)
 
