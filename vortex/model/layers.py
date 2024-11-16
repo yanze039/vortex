@@ -9,8 +9,124 @@ import torch.nn as nn
 import torch.nn.functional as F
 from einops import rearrange
 from torch import Tensor
-
+from typing import Callable
 from vortex.model.utils import grab_first_if_tuple
+
+try:
+    from transformer_engine.pytorch import LayerNormLinear, Linear, LayerNorm
+    from transformer_engine.common.recipe import Format, DelayedScaling
+    import transformer_engine.pytorch as te
+except:
+    print("WARNING: transformer_engine not installed. Using default recipe.")
+    raise NotImplementedError
+
+def set_format_recipe():
+    fp8_format = Format.HYBRID  # E4M3 during forward pass, E5M2 during backward pass
+    fp8_recipe = DelayedScaling(fp8_format=fp8_format, amax_history_len=16, amax_compute_algo="max")
+    return fp8_format, fp8_recipe
+
+
+class TELinear(Linear):
+    """
+    Wrapper for the Transformer-Engine's `Linear` layer.
+
+    Note that if Megatron's parallel_state has not been initialized
+    yet, the tp_group passed to TE will be None and must be set later
+    via set_tensor_parallel_group().
+    """
+
+    def __init__(
+        self,
+        input_size: int,
+        output_size: int,
+        init_method: Callable,
+        bias: bool = True,
+        skip_bias_add: bool = False,
+        use_fp8: bool = False,
+        **kwargs
+    ):
+        # Parameters are initialized at higher precision even if fp8
+        # is used
+        params_dtype = torch.bfloat16
+
+        # TE returns a zero length Tensor when bias=False and
+        # return_bias=True, but we prefer None.  So in that case we
+        # tell TE to not return the bias, and return None
+        # ourselves. This way our forward always returns two values
+        # and we don't have to deal with the zero length Tensor.
+        self.te_return_bias = skip_bias_add and bias
+
+        self.use_fp8_input_projections = use_fp8
+        if use_fp8:
+            self.fp8_format, self.fp8_recipe = set_format_recipe()
+
+        super().__init__(
+            in_features=input_size,
+            out_features=output_size,
+            sequence_parallel=False,
+            fuse_wgrad_accumulation=False,
+            tp_group=None,
+            tp_size=1,
+            init_method=init_method,
+            params_dtype=params_dtype,
+            parallel_mode="column",
+            bias=bias,
+            return_bias=self.te_return_bias,
+            **kwargs,
+        )
+
+    def forward(self, x):
+
+        if self.use_fp8_input_projections:
+            with te.fp8_autocast(enabled=True, fp8_recipe=self.fp8_recipe):
+                out = super().forward(x)
+        else:
+            out = super().forward(x)
+
+        # TE only returns a tuple when return_bias is True, otherwise
+        # it returns a single Tensor, we always want to return two
+        # values regardless of the arguments.
+        if self.te_return_bias:
+            return out
+        return out, None
+    
+
+class FlexLinear:
+    """
+    Megatron and Transformer Engine linear layer compatible with fp8, bf16, fp16 and fp32
+    """
+
+    def __new__(
+        self,
+        input_size,
+        output_size,
+        config,
+        parallel_mode: str,
+        bias: bool = False,
+        skip_bias_add: bool = True,
+        use_fp8: bool = False,
+        input_is_parallel=False,  # for row parallel
+        gather_output: bool = True,  # for column parallel
+        parallel_output: bool = False,  # for row parallel
+        **kwargs
+    ):
+        # use_fp8 = config.use_fp8_linears
+        self.config = config
+        instance = None
+
+        if use_fp8:
+            instance = TELinear(
+                input_size=input_size,
+                output_size=output_size,
+                config=self.config,
+                parallel_mode=parallel_mode,
+                bias=bias,
+                skip_bias_add=skip_bias_add,
+                **kwargs,
+            )
+
+        return instance
+
 
 
 class RMSNorm(torch.nn.Module):
@@ -78,7 +194,6 @@ class ParallelGatedMLP(nn.Module):
     def forward(self, z):
         z1, z2 = self.l1(z), self.l2(z)
         z1, z2 = grab_first_if_tuple(z1), grab_first_if_tuple(z2)
-
         y = self.l3(self.act(z1) * z2)
         return grab_first_if_tuple(y)
 

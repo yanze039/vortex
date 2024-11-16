@@ -57,4 +57,5 @@ inference_mode: True
 tokenizer_type: CharLevelTokenizer 
 prefill_style: fft
 mlp_activation: gelu
-print_activations: False
+print_activations: True
+ground_truth_activations_path: /home/zymrael/checkpoints/evo2/7b-ablations-n32/7b_stripedhyena2_base_4M_resume/savanna/

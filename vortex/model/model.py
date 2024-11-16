@@ -11,7 +11,7 @@ import torch.nn.functional as F
 
 from vortex.model.cache import InferenceParams, HyenaCascadeFIRInferenceParams, HyenaCascadeIIRInferenceParams
 from vortex.model.engine import HyenaInferenceEngine
-from vortex.model.layers import ParallelGatedMLP, RMSNorm, VocabParallelEmbedding
+from vortex.model.layers import ParallelGatedMLP, RMSNorm, VocabParallelEmbedding, TELinear
 from vortex.model.utils import column_split, print_rank_0
 from vortex.logging import initialize_vortex_logger, activations_logger
 
@@ -93,6 +93,7 @@ class AttentionBlock(nn.Module):
         if self.print_activations:
             activations_logger.info(f"pre mlp: {u} {u.min()} {u.max()} {self.mlp.__class__}")
             activations_logger.info(f"post mlp norm: {self.post_norm(u)} {self.post_norm(u).min()} {self.post_norm(u).max()}")
+            activations_logger.info(f"post mlp: {self.mlp(self.post_norm(u))} {self.mlp(self.post_norm(u)).min()} {self.mlp(self.post_norm(u)).max()}")
         
         u = self.mlp(self.post_norm(u)) + u
         return u, None
@@ -176,21 +177,20 @@ class HyenaCascade(nn.Module):
             self.h = nn.Parameter(torch.randn(self.hyena_filter_groups, 1, fir_inner_filter_length))
 
             if fir_inner_filter_length >= 128:
-                self.D = nn.Parameter(torch.zeros(self.hyena_filter_groups))
+                self.D = nn.Parameter(torch.zeros(self.hidden_size))
 
             if fir_inner_filter_length < 128:
                 self.D = None
 
         else:
-            poles = torch.randn(self.num_systems, self.state_size, 1, 2)
+            log_poles = torch.randn(self.num_systems, self.state_size, 1, dtype=torch.float32)
 
             # TODO: bring over init from internals
-            poles[..., 0] = 1e-2 * torch.randn(self.num_systems, self.state_size, 1)
-            poles[..., 1] = 1e-3 * torch.randn(self.num_systems, self.state_size, 1)
+            # poles[..., 0] = 1e-2 * torch.randn(self.num_systems, self.state_size, 1)
+            #poles[..., 1] = 1e-3 * torch.randn(self.num_systems, self.state_size, 1)
 
-            self.poles = nn.Parameter(poles)
-
-            self.residues = nn.Parameter(torch.randn(self.num_systems, self.state_size, 1, 2))
+            self.log_poles = nn.Parameter(log_poles)
+            self.residues = nn.Parameter(torch.randn(self.num_systems, self.state_size, dtype=torch.float32))
             self.D = nn.Parameter(torch.zeros(self.hidden_size))
             self.h = None
         self.t = None
@@ -238,8 +238,6 @@ class HyenaCascade(nn.Module):
         D = self.D
         if self.hyena_filter_groups > 1:
             h = h.repeat_interleave(self.hidden_size // self.hyena_filter_groups, 0)
-            if D is not None:
-                D = D.repeat_interleave(self.hidden_size // self.hyena_filter_groups)
         
         # if inference_params is not None, we plan to perform generation:
         # prefilling is handled by the engine.
@@ -276,7 +274,7 @@ class HyenaCascade(nn.Module):
                 D,
                 L,
                 t=self.t,
-                poles=self.poles,
+                poles=self.log_poles,
                 residues=self.residues,
                 dims=dims,
                 inference_params=inference_params,
@@ -333,9 +331,9 @@ class HyenaCascade(nn.Module):
                 v,
                 self.D,
                 self.residues,
-                self.poles,
+                self.log_poles,
                 inference_params.state_dict[self.layer_idx],
-                iir_groups=self.hidden_size // self.hyena_filter_groups,
+                iir_groups=1,
             )
             inference_params.state_dict[self.layer_idx] = iir_state
 
@@ -359,10 +357,11 @@ class HyenaCascade(nn.Module):
         self.update_time(L, device)
         filter_dtype = torch.float32
         residues, log_poles = (
-            torch.view_as_complex(self.residues.to(filter_dtype)),
-            torch.view_as_complex(self.poles.to(filter_dtype)).log(),
+            self.residues.to(filter_dtype),
+            self.log_poles.to(filter_dtype),
         )
-        h = (residues * (log_poles * self.t).exp()).real.sum(1)[None]
+        # h = torch.einsum('do,dot->dt', residues, (log_poles * self.t).exp())
+        h = (residues[...,None] * (log_poles * self.t).exp()).sum(1)[None] # B, D, L
         return h, filter_dtype, log_poles, residues
 
 
@@ -384,7 +383,15 @@ class ParallelGatedConvBlock(nn.Module):
         mlp_dtype = config.get("mlp_dtype", torch.bfloat16)
         self.pre_norm, self.post_norm = RMSNorm(config).to(dtype=dtype), RMSNorm(config).to(dtype=dtype)
         self.filter = HyenaCascade(config, layer_idx, hyena_filter_groups=self.hyena_filter_groups, fir_inner_filter_length=fir_inner_filter_length).to(dtype=dtype)
-        self.projections = nn.Linear(config.hidden_size, 3 * config.hidden_size, bias=config.qkv_proj_bias)
+        self.projections = TELinear(
+            config.hidden_size,
+            3 * config.hidden_size,
+            bias=config.qkv_proj_bias,
+            init_method=torch.nn.init.xavier_uniform_,
+            use_fp8=config.get("use_fp8_input_projections", False),
+        )
+        
+        nn.Linear(config.hidden_size, 3 * config.hidden_size, bias=config.qkv_proj_bias)
         self.out_filter_dense = nn.Linear(config.hidden_size, config.hidden_size, bias=config.hyena_out_proj_bias).to(dtype)
         self.mlp = ParallelGatedMLP(config, layer_idx).to(dtype=mlp_dtype)
 
@@ -412,12 +419,16 @@ class ParallelGatedConvBlock(nn.Module):
                 activations_logger.info(f"post mixer norm activation_diff: {activation_diff.max()}, {activation_diff.mean()}")
                 activations_logger.info(f"pre norm scale: {self.pre_norm.scale}, {self.pre_norm.scale.min()}, {self.pre_norm.scale.max()}")
 
-        return self.projections(self.pre_norm(x))
+        y = self.projections(self.pre_norm(x))
+        if isinstance(y, tuple):
+            y = y[0]
+        return y
 
     def res_mlp_norm(self, x):
         if self.print_activations:
             activations_logger.info(f"pre mlp: {x} {x.min()} {x.max()} {self.mlp.__class__}")
             activations_logger.info(f"post mlp norm: {self.post_norm(x)} {self.post_norm(x).min()} {self.post_norm(x).max()}")
+            activations_logger.info(f"post mlp: {self.mlp(self.post_norm(x))} {self.mlp(self.post_norm(x)).min()} {self.mlp(self.post_norm(x)).max()}")
             if self.ground_truth_activations_path:
                 pre_mlp_savanna = torch.load(f"{self.ground_truth_activations_path}/pre_mlp_{self.layer_idx}.pt")
                 post_mlp_savanna = torch.load(f"{self.ground_truth_activations_path}/post_mlp_norm_{self.layer_idx}.pt")
@@ -426,7 +437,6 @@ class ParallelGatedConvBlock(nn.Module):
                 activations_logger.info(f"pre mlp activation_diff: {activation_diff.max()}, {activation_diff.mean()}")
                 activation_diff = (self.post_norm(x).squeeze() - post_mlp_savanna.squeeze()).abs()
                 activations_logger.info(f"post mlp norm activation_diff: {activation_diff.max()}, {activation_diff.mean()}")
-
         return self.mlp(self.post_norm(x)) + x
 
     def forward(self, u, inference_params=None, padding_mask=None, *args, **kwargs):
@@ -443,17 +453,20 @@ class ParallelGatedConvBlock(nn.Module):
                 activations_logger.info(f"pre filter activation_diff: {activation_diff.max()}, {activation_diff.mean()}")
         z, inference_params = self.filter(z, inference_params=inference_params, padding_mask=padding_mask)
         
+        
         if self.print_activations:
-            activations_logger.info(f"post filter: {z} {z.min()} {z.max()} {self.filter.__class__}")
+            activations_logger.info(f"post postgate: {z} {z.min()} {z.max()} {self.filter.__class__}")
             activations_logger.info(f"post out proj: {self.out_filter_dense(z)} {self.out_filter_dense(z).min()} {self.out_filter_dense(z).max()} {self.out_filter_dense.__class__}")
+            activations_logger.info(f"post mixer: {self.out_filter_dense(z) + u} {(self.out_filter_dense(z) + u).min()} {(self.out_filter_dense(z) + u).max()}")
             if self.ground_truth_activations_path:
                 z_savanna = torch.load(f"{self.ground_truth_activations_path}/post_filter_{self.layer_idx}.pt")
                 activation_diff = (z - z_savanna.squeeze()).abs()
                 activations_logger.info(f"post filter activation_diff: {activation_diff.max()}, {activation_diff.mean()}")    
-                # z_savanna = torch.load(f"{self.ground_truth_activations_path}/post_out_proj_{self.layer_idx}.pt")
-                # z_ = F.linear(z, self.out_filter_dense.weight)
-                # activation_diff = (z_ - z_savanna.squeeze()).abs()
-                # activations_logger.info(f"post out proj activation_diff: {activation_diff.max()}, {activation_diff.mean()}")
+
+                z_savanna = torch.load(f"{self.ground_truth_activations_path}/post_out_proj_{self.layer_idx}.pt")
+                z_ = F.linear(z, self.out_filter_dense.weight)
+                activation_diff = (z_ - z_savanna.squeeze()).abs()
+                activations_logger.info(f"post out proj activation_diff: {activation_diff.max()}, {activation_diff.mean()}")
         
         z_in = self.out_filter_dense(z) + u
 
@@ -570,7 +583,7 @@ class StripedHyena(nn.Module):
                     activations_logger.info(f"pre block {block_idx} activation_diff: {activation_diff.max()}, {activation_diff.mean()}")
 
             x, _ = block(x, inference_params=inference_params)
-
+            
             if self.print_activations:
                 activations_logger.info(f"post block {block_idx}: {x}, {x.min()}, {x.max()}")
                 if self.ground_truth_activations_path:
@@ -593,7 +606,6 @@ class StripedHyena(nn.Module):
                     activations_logger.info(f"pre block {block_idx} activation_diff: {activation_diff.max()}, {activation_diff.mean()}")
 
             x, _ = block(x, inference_params=None, padding_mask=padding_mask)
-
             if self.print_activations:
                 activations_logger.info(f"post block {block_idx}: {x}, {x.min()}, {x.max()}")
                 if self.ground_truth_activations_path:
@@ -639,8 +651,8 @@ class StripedHyena(nn.Module):
 
                     block.filter._set_time(L, device)
                     residues, poles = (
-                        torch.view_as_complex(block.filter.residues.to(torch.float16)),
-                        torch.view_as_complex(block.filter.poles.to(torch.float16)),
+                        block.filter.residues.to(torch.float16),
+                        block.filter.poles.to(torch.float16),
                     )
 
                     block.filter.h = (residues * poles**block.filter.t).real.sum(1)[None]
@@ -714,5 +726,5 @@ class StripedHyena(nn.Module):
             (4096, 1, 128)
         ]
         for k, p in self.named_parameters():
-            if "poles" not in k and "residues" not in k and p.shape not in excluded_shapes:
+            if "log_poles" not in k and "residues" not in k and p.shape not in excluded_shapes:
                 p.data = p.data.to(torch.bfloat16)

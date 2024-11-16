@@ -41,13 +41,13 @@ if __name__ == "__main__":
     config.cached_generation = False 
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     with torch.device(device):
-        m = StripedHyena(config)
+        m = StripedHyena(config).to(torch.float32)
 
     if args.checkpoint_path:
         state_dict = torch.load(args.checkpoint_path, map_location=device)
         #print(m.state_dict().keys())
         #print(state_dict.keys())
-        m.custom_load_state_dict(state_dict, strict=True)
+        m.custom_load_state_dict(state_dict, strict=False)
 
     m = m.to(device)
 
@@ -65,6 +65,7 @@ if __name__ == "__main__":
 
     logits_vortex = m.forward(inputs)
 
+    breakpoint()
     #logits_garyk = torch.load('/home/gbrixi/dnagen/eval/bin/evo2_7b_ACTG.pt', map_location=device)
 
 
