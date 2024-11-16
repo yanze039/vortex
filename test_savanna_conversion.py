@@ -1,4 +1,7 @@
 # python test_savanna_conversion.py --config_path /home/zymrael/workspace/stripedhyena-2/configs/shc-evo2-7b-8k-2T-v1.yml --logits_path /home/zymrael/checkpoints/evo2/7b_13h_8m_8s_3a_cascade15_inference/logits_test.pt --checkpoint_path /home/zymrael/checkpoints/evo2/7b_13h_8m_8s_3a_cascade15_inference/iter_457500.pt
+# /home/zymrael//checkpoints/evo2/7b-ablations-n32/7b_stripedhyena2_base_4M_resume/iter_205000.pt
+#  CUDA_VISIBLE_DEVICES=0 python test_savanna_conversion.py --config_path /home/zymrael/workspace/vortex/configs/shc-evo2-7b-8k-2T-v2.yml --logits_path /home/zymrael/checkpoints/evo2/7b-ablations-n32/7b_stripedhyena2_base_4M_resume/logits_test.pt --checkpoint_path /home/zymrael/checkpoints/evo2/7b-ablations-n32/7b_stripedhyena2_base_4M_resume/iter_205000.pt
+
 
 import argparse
 import os
@@ -44,7 +47,7 @@ if __name__ == "__main__":
         state_dict = torch.load(args.checkpoint_path, map_location=device)
         #print(m.state_dict().keys())
         #print(state_dict.keys())
-        m.custom_load_state_dict(state_dict, strict=False)
+        m.custom_load_state_dict(state_dict, strict=True)
 
     m = m.to(device)
 
@@ -61,7 +64,6 @@ if __name__ == "__main__":
     inputs = torch.tensor(inputs, dtype=torch.long, device=device)[None]
 
     logits_vortex = m.forward(inputs)
-    breakpoint()
 
     #logits_garyk = torch.load('/home/gbrixi/dnagen/eval/bin/evo2_7b_ACTG.pt', map_location=device)
 
