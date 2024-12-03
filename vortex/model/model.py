@@ -12,7 +12,7 @@ import torch.nn.functional as F
 from vortex.model.cache import InferenceParams, HyenaCascadeFIRInferenceParams, HyenaCascadeIIRInferenceParams
 from vortex.model.engine import HyenaInferenceEngine
 from vortex.model.layers import ParallelGatedMLP, RMSNorm, VocabParallelEmbedding, TELinear
-from vortex.model.utils import column_split, print_rank_0
+from vortex.model.utils import column_split, interleave, print_rank_0
 from vortex.logging import initialize_vortex_logger, activations_logger
 
 import logging 
@@ -229,6 +229,9 @@ class HyenaCascade(nn.Module):
         )
         if inference_params:
             inference_params.fir_state_dict[self.layer_idx] = fir_state
+        
+        if self.config.interleave:
+            z_pre = interleave(z_pre)
 
         if self.h is None:
             h, _, _, _ = self.compute_filter(L, u.device)
@@ -303,7 +306,9 @@ class HyenaCascade(nn.Module):
         )
         inference_params.fir_state_dict[self.layer_idx] = fir_state
 
-
+        if self.config.interleave:
+            z_pre = interleave(z_pre)
+            
         x2, x1, v = (
             column_split(z_pre, self.num_attention_heads, self.hidden_size_per_attention_head)
             if self.column_split_hyena
@@ -509,8 +514,13 @@ class StripedHyena(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.config = config
-        self.logger = initialize_vortex_logger("basic_logger")
         self.print_activations = config.get("print_activations", False)
+
+        if self.print_activations:
+            self.logger = initialize_vortex_logger("basic_logger")
+        else:
+            self.logger = initialize_vortex_logger("basic_logger", level=100)
+
         self.ground_truth_activations_path = config.get("ground_truth_activations_path", None)
         self.logger.info(f"Initializing StripedHyena with config: {config}")
         self.embedding_layer = VocabParallelEmbedding(config)
