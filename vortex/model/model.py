@@ -716,7 +716,7 @@ class StripedHyena(nn.Module):
         """
         Post-processes the state_dict to convert savanna checkpoints to vortex checkpoints.
         """
-        self.logger.info(f"Loading state dict: {state_dict}, with strict: {strict}")
+        self.logger.debug(f"Loading state dict: {state_dict}, with strict: {strict}")
         self.load_state_dict(state_dict, strict=strict)
 
         if self.config.get("column_split", True):
