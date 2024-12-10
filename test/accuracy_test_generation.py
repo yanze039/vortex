@@ -9,14 +9,7 @@ import numpy as np
 from Bio import Align
 from Bio.Seq import Seq
 
-import torch
 import yaml
-
-from vortex.model.generation import Generator
-from vortex.model.model import StripedHyena
-from vortex.model.sample import sample
-from vortex.model.tokenizer import HFAutoTokenizer, CharLevelTokenizer
-from vortex.model.utils import dotdict, print_rank_0
 
 
 def read_prompts(
@@ -105,11 +98,17 @@ def calculate_sequence_identity(seq1: str, seq2: str, amino_acids=False) -> Opti
 
     return (matches / min(len(seq1),len(seq2))) * 100
 
-
-if __name__ == "__main__":
+def main():
     '''
     python ./test/generation/test_generation.py --config_path <config_path> --checkpoint_path <path.pt>
     '''
+    import torch
+
+    from vortex.model.generation import Generator
+    from vortex.model.model import StripedHyena
+    from vortex.model.tokenizer import HFAutoTokenizer, CharLevelTokenizer
+    from vortex.model.utils import dotdict
+
     parser = argparse.ArgumentParser(description="Run StripedHyena Model")
     parser.add_argument("--config_path", required=True, help="Path to configuration file")
     parser.add_argument("--checkpoint_path", default=None, help="Path to checkpoint file")
@@ -155,3 +154,6 @@ if __name__ == "__main__":
     print(scores)
     print("\% Matching Nucleotides")
     print(np.mean(scores))
+
+if __name__ == "__main__":
+    main()
