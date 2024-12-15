@@ -12,7 +12,7 @@ import torch.nn.functional as F
 from vortex.model.cache import InferenceParams, HyenaCascadeFIRInferenceParams, HyenaCascadeIIRInferenceParams
 from vortex.model.engine import HyenaInferenceEngine
 from vortex.model.layers import ParallelGatedMLP, RMSNorm, VocabParallelEmbedding, TELinear
-from vortex.model.utils import column_split, interleave, print_rank_0
+from vortex.model.utils import Lambda, column_split, interleave, print_rank_0
 from vortex.logging import initialize_vortex_logger, activations_logger
 
 import logging 
@@ -547,6 +547,7 @@ class StripedHyena(nn.Module):
         self.embedding_layer = VocabParallelEmbedding(config)
         self.norm = RMSNorm(config) if config.get("final_norm", True) else None
         self.unembed = self.embedding_layer if config.tie_embeddings else VocabParallelEmbedding(config)
+        self.unembed = Lambda(self.embedding_layer.unembed)
 
         if config.get("use_flashfft", "True"):
             try:
@@ -571,7 +572,7 @@ class StripedHyena(nn.Module):
         if self.print_activations:
             activations_logger.info(f"pre embedding: {x}, {x.min()}, {x.max()}")
         
-        x = self.embedding_layer.embed(x)
+        x = self.embedding_layer(x)
         
         if self.print_activations:
             activations_logger.info(f"post embedding: {x}, {x.min()}, {x.max()}")
@@ -592,7 +593,7 @@ class StripedHyena(nn.Module):
         if self.print_activations:
             activations_logger.info(f"post norm: {x}, {x.min()}, {x.max(), {self.norm.scale}}")
 
-        x = self.unembed.unembed(x)
+        x = self.unembed(x)
         return x, inference_params_dict_out
 
     def block_idx_to_name(self, block_idx):
