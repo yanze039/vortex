@@ -33,12 +33,12 @@ def test_dna_model(model, device='cuda:0'):
     """
     # Test sequence: E. coli BD1 16S ribosomal RNA gene, a conserved gene
     seq = "AAATTGAAGAGTTTGATCATGGCTCAGATTGAACGCTGGCGGCAGGCCTAACACATGCAAGTCGAACGGTAACAGGAAGAAGCTTGCTCTTTGCTGACGAGTGGCGGACGGGTGAGTAATGTCTGGGAAACTGCCTGATGGAGGGGGATAACTACTGGAAACGGTAGCTAATACCGCATAACGTCGCAAGACCAAAGAGGGGGACCTTCGGGCCTCTTGCCATCGGATGTGCCCAGATGGGATTAGCTAGTAGGTGGGGTAACGGCTCACCTAGGCGACGATCCCTAGCTGGTCTGAGAGGATGACCAGCCACACTGGAACTGAGACACGGTCCAGACTCCTACGGGAGGCAGCAGTGGGGAATATTGCACAATGGGCGCAAGCCTGATGCAGCCATGCCGCGTGTATGAAGAAGGCCTTCGGGTTGTAAAGTACTTTCAGCGGGGAGGAAGGGAGTAAAGTTAATACCTTTGCTCATTGACGTTACCCGCAGAAGAAGCACCGGCTAACTCCGTGCCAGCAGCCGCGGTAATACGGAGGGTGCAAGCGTTAATCGGAATTACTGGGCGTAAAGCGCACGCAGGCGGTTTGTTAAGTCA"
-    
+    # seq = "A"*5000
     input_ids = torch.tensor(
         tokenizer.tokenize(seq),
         dtype=torch.int,
     ).to(device).unsqueeze(0)
-    
+
     output1, _ = model.forward(input_ids)
     logprobs = torch.log_softmax(output1[:, :-1, :], dim=-1)
     chars = torch.argmax(logprobs, dim=-1)
@@ -99,15 +99,10 @@ if __name__ == "__main__":
     else:
         tokenizer = HFAutoTokenizer(config.vocab_file)
     
-    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-    with torch.device(device):
-        m = StripedHyena(config).to(torch.float32)
+    m = StripedHyena(config)
 
     if args.checkpoint_path:
-        state_dict = torch.load(args.checkpoint_path, map_location=device)
-        m.custom_load_state_dict(state_dict, strict=False)
-
-    m = m.to(device)
+        m.custom_load_state_dict(torch.load(args.checkpoint_path), strict=False)
+    
     m.to_bfloat16_except_pr_lc()
-
     test_dna_model(m)

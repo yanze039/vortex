@@ -71,6 +71,24 @@ def column_split(x, num_heads, head_size):
         return x2, x1, v
 
 
+def move_to_device(module, device):
+    """Recursively moves all parameters and buffers to the specified device."""
+    for child in module.children():
+        move_to_device(child, device)
+    
+    for param in module.parameters(recurse=False):
+        if param.device != device:
+            param.data = param.data.to(device)
+    
+    for buf in module.buffers(recurse=False):
+        if buf.device != device:
+            buf.data = buf.data.to(device)
+    
+    module.to(device)
+
+    return module
+
+
 def get_init_from_string(init_str):
     if type(init_str) == str:
         if init_str == "torch.nn.init.zeros_":

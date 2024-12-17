@@ -7,8 +7,7 @@ num_filters: 8192
 hcl_layer_idxs: [2,6,9,13,16,20,23,27,30,34,38,41,45,48]
 hcm_layer_idxs: [1,5,8,12,15,19,22,26,29,33,37,40,44,47]
 hcs_layer_idxs: [0,4,7,11,14,18,21,25,28,32,36,39,43,46]
-attn_layer_idxs: [3,10,17,24,31,35,38,42,49]
-
+attn_layer_idxs: [3,10,17,24,31,35,42,49]
 hcm_filter_length: 128
 hcl_filter_groups: 8192
 hcm_filter_groups: 512
@@ -23,7 +22,7 @@ short_filter_bias: false # add bias to FIR
 mlp_init_method: torch.nn.init.zeros_
 mlp_output_init_method: torch.nn.init.zeros_
 eps: 0.000001
-state_size: 8
+state_size: 16
 rotary_emb_base: 10000 
 make_vocab_size_divisible_by: 8
 inner_size_multiple_of: 16  # force GLU inner_size to be a multiple of
@@ -36,6 +35,10 @@ hyena_filter_groups: 1
 # Split strategy for channels
 column_split_hyena: True
 column_split: True
+interleave: True
+
+use_fp8_input_projections: False
+
 # Legacy options for MP / PP inference
 model_parallel_size: 1
 pipe_parallel_size: 1
@@ -56,4 +59,3 @@ tokenizer_type: CharLevelTokenizer
 prefill_style: fft
 mlp_activation: gelu
 print_activations: False
-ground_truth_activations_path: None
