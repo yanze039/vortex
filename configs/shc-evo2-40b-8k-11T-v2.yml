@@ -25,7 +25,7 @@ eps: 0.000001
 state_size: 16
 rotary_emb_base: 1000000 
 make_vocab_size_divisible_by: 8
-inner_size_multiple_of: 16  # force GLU inner_size to be a multiple of
+inner_size_multiple_of: 128  # force GLU inner_size to be a multiple of
 inner_mlp_size: 21888
 log_intermediate_values: False
 # Number of groups in GQA
@@ -35,7 +35,7 @@ hyena_filter_groups: 1
 # Split strategy for channels
 column_split_hyena: True
 column_split: True
-interleave: False
+interleave: True
 
 use_fp8_input_projections: False
 

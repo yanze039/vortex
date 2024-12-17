@@ -203,10 +203,6 @@ class HyenaCascade(nn.Module):
             return self.parallel_forward(u, inference_params, padding_mask)
 
     def parallel_forward(self, u, inference_params=None, padding_mask=None):
-        print(f"Layer {self.layer_idx} entering parallel_forward:")
-        print(f"Input stats: min={u.min().item()}, max={u.max().item()}, mean={u.mean().item()}")
-        print(f"Input device: {u.device}, dtype: {u.dtype}")
-    
         L = u.shape[1]
         dims = (
             self.hidden_size,
@@ -217,13 +213,6 @@ class HyenaCascade(nn.Module):
         )
         if self.print_activations:
             activations_logger.info(f"pre 1 parallel fir: {u}, {u.min()}, {u.max()}")
-        print(f"Layer {self.layer_idx} stats before parallel_fir:")
-        print(f"Input u: min={u.min().item()}, max={u.max().item()}, mean={u.mean().item()}")
-        print(f"short_filter_weight: min={self.short_filter_weight.min().item()}, max={self.short_filter_weight.max().item()}, mean={self.short_filter_weight.mean().item()}")
-        if self.short_filter_bias is not None:
-            print(f"short_filter_bias: min={self.short_filter_bias.min().item()}, max={self.short_filter_bias.max().item()}, mean={self.short_filter_bias.mean().item()}")
-        print(f"Input shape: {u.shape}, Weight shape: {self.short_filter_weight.shape}")
-        print(f"Input device: {u.device}, Weight device: {self.short_filter_weight.device}")
 
         z_pre, fir_state = self.engine.parallel_fir(
             self.fir_fn,
@@ -240,36 +229,22 @@ class HyenaCascade(nn.Module):
             dim_last=True,
         )
 
-        if torch.isnan(z_pre).any():
-            print(f"Layer {self.layer_idx}: NaN after first parallel_fir")
-
         if inference_params:
             inference_params.fir_state_dict[self.layer_idx] = fir_state
         
         if self.config.interleave:
             z_pre = interleave(z_pre)
-            if torch.isnan(z_pre).any():
-                print(f"Layer {self.layer_idx}: NaN after interleave")
-
 
         if self.h is None:
             h, _, _, _ = self.compute_filter(L, u.device)
         else:
             h = self.h
-            
-        if torch.isnan(h).any():
-            print(f"Layer {self.layer_idx}: NaN in filter h")
 
         D = self.D
-        if D is not None and torch.isnan(D).any():
-            print(f"Layer {self.layer_idx}: NaN in D")
 
         if self.hyena_filter_groups > 1:
             h = h.repeat_interleave(self.hidden_size // self.hyena_filter_groups, 0)
-            if torch.isnan(h).any():
-                print(f"Layer {self.layer_idx}: NaN after h repeat_interleave")
 
-        
         # if inference_params is not None, we plan to perform generation:
         # prefilling is handled by the engine.
         if self.fir_inner_filter_length is not None:
@@ -472,24 +447,16 @@ class ParallelGatedConvBlock(nn.Module):
                 activation_diff = (self.pre_norm(x).squeeze() - post_norm_savanna.squeeze()).abs()
                 activations_logger.info(f"post mixer norm activation_diff: {activation_diff.max()}, {activation_diff.mean()}")
                 activations_logger.info(f"pre norm scale: {self.pre_norm.scale}, {self.pre_norm.scale.min()}, {self.pre_norm.scale.max()}")
-
-        print(f"proj_norm input: min={x.min().item()}, max={x.max().item()}, mean={x.mean().item()}")
         
         normalized = self.pre_norm(x)
-        print(f"After pre_norm: min={normalized.min().item()}, max={normalized.max().item()}, mean={normalized.mean().item()}")
-        print(f"pre_norm.scale stats: min={self.pre_norm.scale.min().item()}, max={self.pre_norm.scale.max().item()}, mean={self.pre_norm.scale.mean().item()}")
-        
         normalized = self.pad_to_multiple(normalized)
-        print(f"After padding: min={normalized.min().item()}, max={normalized.max().item()}, mean={normalized.mean().item()}")
         
         projected = self.projections(normalized)
         if isinstance(projected, tuple):
             projected = projected[0]
-        print(f"After projection: min={projected.min().item()}, max={projected.max().item()}, mean={projected.mean().item()}")
-        
+                
         original_seq_len = x.size(1)
         # Slice back to original sequence length if padding was added
-
         if projected.size(1) > original_seq_len:
             projected = projected[:, :original_seq_len, :]
         
@@ -511,13 +478,10 @@ class ParallelGatedConvBlock(nn.Module):
         return self.mlp(self.post_norm(x)) + x
 
     def forward(self, u, inference_params=None, padding_mask=None, *args, **kwargs):
-        print(f"Beflre proj_norm: min={u.min().item()}, max={u.max().item()}, mean={u.mean().item()}")
         z = self.proj_norm_fn(u)
-        print(f"After proj_norm: min={z.min().item()}, max={z.max().item()}, mean={z.mean().item()}")
 
         if type(padding_mask) == torch.Tensor:  # guard against bias
             z = z * padding_mask[..., None]
-            print(f"After padding mask: min={z.min().item()}, max={z.max().item()}, mean={z.mean().item()}")
 
         if self.print_activations:
             activations_logger.info(f"pre filter: {z} {z.min()} {z.max()} {self.filter.__class__}")
@@ -525,7 +489,7 @@ class ParallelGatedConvBlock(nn.Module):
                 z_savanna = torch.load(f"{self.ground_truth_activations_path}/pre_filter_{self.layer_idx}.pt")
                 activation_diff = (z - z_savanna.squeeze()).abs()
                 activations_logger.info(f"pre filter activation_diff: {activation_diff.max()}, {activation_diff.mean()}")
-        print(f"Before filter call: min={z.min().item()}, max={z.max().item()}, mean={z.mean().item()}")
+
         z, inference_params = self.filter(z, inference_params=inference_params, padding_mask=padding_mask)
         
         
@@ -683,6 +647,11 @@ class StripedHyena(nn.Module):
         else:
             raise ValueError(f"Block index {block_idx} not found")
 
+    def cross_device_transfer(self, x, block_idx):
+        if self.block_idx_to_device[max(block_idx-1, 0)] != self.block_idx_to_device[block_idx]:
+            x = x.to(self.block_idx_to_device[block_idx])
+        return x
+
     def stateful_forward(self, x, inference_params_dict=None):
         for block_idx, block in enumerate(self.blocks):
             inference_params = inference_params_dict[self.block_idx_to_name(block_idx)]
@@ -694,32 +663,7 @@ class StripedHyena(nn.Module):
                     activation_diff = (x - x_savanna.squeeze()).abs()
                     activations_logger.info(f"pre block {block_idx} activation_diff: {activation_diff.max()}, {activation_diff.mean()}")
             
-            if self.block_idx_to_device[block_idx-1] != self.block_idx_to_device[block_idx]:
-                last_device = self.block_idx_to_device[block_idx-1]
-                current_device = self.block_idx_to_device[block_idx]
-
-                # Check block components before transition
-                print(f"Block {block_idx} TELinear weight:")
-                print(block.projections.weight)
-                # print(f"projections.weight device: {block.projections.weight.device}")
-                # if hasattr(block.projections, 'fp8_weight'):
-                #     print(f"projections.fp8_weight device: {block.projections.fp8_weight.device}")
-                # if hasattr(block.projections, 'scale'):
-                #     print(f"projections.scale device: {block.projections.scale.device}")
-
-                if last_device and torch.cuda.is_available():
-                    torch.cuda.synchronize(last_device)
-                    
-                x = x.to(self.block_idx_to_device[block_idx], non_blocking=False, dtype=torch.bfloat16)
-
-                # # Verify all TELinear components moved
-                # print(f"Block {block_idx} TELinear devices after transition:")
-                # print(f"projections.weight device: {block.projections.weight.device}")
-                # if hasattr(block.projections, 'fp8_weight'):
-                #     print(f"projections.fp8_weight device: {block.projections.fp8_weight.device}")
-                # if hasattr(block.projections, 'scale'):
-                #     print(f"projections.scale device: {block.projections.scale.device}")
-
+            x = self.cross_device_transfer(x, block_idx)
             x, _ = block(x, inference_params=inference_params)
             
             if self.print_activations:
@@ -742,50 +686,10 @@ class StripedHyena(nn.Module):
                     x_savanna = torch.load(f"{self.ground_truth_activations_path}/pre_block_{block_idx}.pt")
                     activation_diff = (x - x_savanna.squeeze()).abs()
                     activations_logger.info(f"pre block {block_idx} activation_diff: {activation_diff.max()}, {activation_diff.mean()}")
-            if torch.isnan(x).any():
-                print(f"NaN detected before block {block_idx}!")
-                break
             
-                              
-            if self.block_idx_to_device[max(block_idx-1,0)]!= self.block_idx_to_device[block_idx]:
-                last_device = self.block_idx_to_device[block_idx-1]
-                current_device = self.block_idx_to_device[block_idx]
-
-                # Check block components before transition
-
-                print(block.projections.weight)
-
-                print(f"Block {block_idx} TELinear devices before transition:")
-                print(f"projections.weight device: {block.projections.weight.device}")
-                if hasattr(block.projections, 'fp8_weight'):
-                    print(f"projections.fp8_weight device: {block.projections.fp8_weight.device}")
-                if hasattr(block.projections, 'scale'):
-                    print(f"projections.scale device: {block.projections.scale.device}")
-
-                if last_device and torch.cuda.is_available():
-                    torch.cuda.synchronize(last_device)
-                with torch.no_grad():
-                    x = x.to(self.block_idx_to_device[block_idx], dtype=torch.bfloat16)
-                    torch.cuda.synchronize(current_device)
-
-
-                # Verify all TELinear components moved
-                print(f"Block {block_idx} TELinear devices after transition:")
-                print(f"projections.weight device: {block.projections.weight.device}")
-                if hasattr(block.projections, 'fp8_weight'):
-                    print(f"projections.fp8_weight device: {block.projections.fp8_weight.device}")
-                if hasattr(block.projections, 'scale'):
-                    print(f"projections.scale device: {block.projections.scale.device}")
-    
-            if torch.isnan(x).any():
-                print(f"NaN detected after moving to in block {block_idx}!")
-                break
-            torch.cuda.synchronize()
+            x = self.cross_device_transfer(x, block_idx)
             x, _ = block(x, inference_params=None, padding_mask=padding_mask)
 
-            if torch.isnan(x).any():
-                print(f"NaN detected after block {block_idx}!")
-                break
             if self.print_activations:
                 activations_logger.info(f"post block {block_idx}: {x}, {x.min()}, {x.max()}")
                 if self.ground_truth_activations_path:
