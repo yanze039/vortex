@@ -23,7 +23,7 @@ mlp_init_method: torch.nn.init.zeros_
 mlp_output_init_method: torch.nn.init.zeros_
 eps: 0.000001
 state_size: 16
-rotary_emb_base: 10000 
+rotary_emb_base: 1000000 
 make_vocab_size_divisible_by: 8
 inner_size_multiple_of: 16  # force GLU inner_size to be a multiple of
 inner_mlp_size: 21888
@@ -35,7 +35,7 @@ hyena_filter_groups: 1
 # Split strategy for channels
 column_split_hyena: True
 column_split: True
-interleave: True
+interleave: False
 
 use_fp8_input_projections: False
 
@@ -46,7 +46,7 @@ tie_embeddings: True
 mha_out_proj_bias: True
 hyena_out_proj_bias: True
 qkv_proj_bias: False
-max_seqlen: 32768
+max_seqlen: 8192
 max_batch_size: 1
 final_norm: True 
 use_flash_attn: True
@@ -58,4 +58,4 @@ inference_mode: True
 tokenizer_type: CharLevelTokenizer 
 prefill_style: fft
 mlp_activation: gelu
-print_activations: False
+print_activations: True
