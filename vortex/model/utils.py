@@ -1,4 +1,5 @@
 import torch
+from einops import rearrange
 
 
 def grab_first_if_tuple(x):
@@ -6,6 +7,21 @@ def grab_first_if_tuple(x):
         return x[0]
     else:
         return x
+
+
+def interleave(z_pre):
+    if len(z_pre.shape) == 3: # non-cached
+        x1 = z_pre[:,0::3,:]
+        x2 = z_pre[:,1::3,:]
+        v  = z_pre[:,2::3,:]
+        z_pre = torch.cat([x1, x2, v], dim=1)
+        return z_pre
+    else:
+        x1 = z_pre[...,0::3]
+        x2 = z_pre[...,1::3]
+        v  = z_pre[...,2::3]
+        z_pre = torch.concat([x1, x2, v], dim=-1)
+        return z_pre
 
 
 def column_split(x, num_heads, head_size):
