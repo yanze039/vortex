@@ -1,9 +1,8 @@
 # Vortex
 
-Utilities for efficient inference and training of deep signal processing models.
+Utilities for efficient inference of deep signal processing models (Hyena, HyenaDNA, StripedHyena, HyenaCascade).
 
-
-## Inference
+## Quickstart
 
 Set up the environment, then run:
 
@@ -16,8 +15,6 @@ python3 generate.py \
 ```
 
 The flag `--cached_generation` is optional, but recommended for faster generation. 
-
-## Kernels
 
 
 

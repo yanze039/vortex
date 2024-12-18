@@ -314,10 +314,15 @@ class HyenaCascade(nn.Module):
             x1, x2 = x2, x1
 
         if self.fir_inner_filter_length is not None:
+            if self.hyena_filter_groups > 1:
+                h = self.h.repeat_interleave(self.hidden_size // self.hyena_filter_groups, 0)
+            else:
+                h = self.h
+
             y, fir_inner_state = self.engine.step_fir(
                 x1 * v,
                 inference_params.fir_inner_state_dict[self.layer_idx],
-                weight=self.h,
+                weight=h,
                 bias=self.D,
                 flip_filter=self.fir_inner_filter_length >= 128,
                 gated_bias=self.fir_inner_filter_length >= 128,
@@ -360,7 +365,6 @@ class HyenaCascade(nn.Module):
             self.residues.to(filter_dtype),
             self.log_poles.to(filter_dtype),
         )
-        # h = torch.einsum('do,dot->dt', residues, (log_poles * self.t).exp())
         h = (residues[...,None] * (log_poles * self.t).exp()).sum(1)[None] # B, D, L
         return h, filter_dtype, log_poles, residues
 
@@ -457,7 +461,9 @@ class ParallelGatedConvBlock(nn.Module):
         if self.print_activations:
             activations_logger.info(f"post postgate: {z} {z.min()} {z.max()} {self.filter.__class__}")
             activations_logger.info(f"post out proj: {self.out_filter_dense(z)} {self.out_filter_dense(z).min()} {self.out_filter_dense(z).max()} {self.out_filter_dense.__class__}")
-            activations_logger.info(f"post mixer: {self.out_filter_dense(z) + u} {(self.out_filter_dense(z) + u).min()} {(self.out_filter_dense(z) + u).max()}")
+            activations_logger.info(f"post mixer dense and residual: {self.out_filter_dense(z) + u} {(self.out_filter_dense(z) + u).min()} {(self.out_filter_dense(z) + u).max()}")
+            activations_logger.info(f"post mixer dense: {self.out_filter_dense(z)} {self.out_filter_dense(z).min()} {self.out_filter_dense(z).max()}")
+            activations_logger.info(f"post mixer: {z} {z.min()} {z.max()}")
             if self.ground_truth_activations_path:
                 z_savanna = torch.load(f"{self.ground_truth_activations_path}/post_filter_{self.layer_idx}.pt")
                 activation_diff = (z - z_savanna.squeeze()).abs()
