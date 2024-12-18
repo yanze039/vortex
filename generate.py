@@ -55,7 +55,7 @@ if __name__ == "__main__":
     if not args.dry_run:
         if args.checkpoint_path:
             # inv_freq are instantiated as parameters
-            m.custom_load_state_dict(torch.load(args.checkpoint_path, map_location=device), strict=True)
+            m.custom_load_state_dict(torch.load(args.checkpoint_path, map_location=device), strict=False)
 
     m.to_bfloat16_except_pr_lc()
 
