@@ -36,6 +36,8 @@ def generate_and_score(sequences, generator, tokenizer, args, generations_per_pr
     """
     Prompt with first half, generate and score on 2nd half
     """
+    import torch
+
     scores = []
     prompts = []
     targets = []
