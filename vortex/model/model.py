@@ -11,7 +11,7 @@ import torch.nn.functional as F
 
 from vortex.model.cache import InferenceParams, HyenaCascadeFIRInferenceParams, HyenaCascadeIIRInferenceParams
 from vortex.model.engine import HyenaInferenceEngine
-from vortex.model.layers import ParallelGatedMLP, RMSNorm, VocabParallelEmbedding, TELinear
+from vortex.model.layers import ParallelGatedMLP, RMSNorm, VocabParallelEmbedding, VocabParallelUnembedding, TELinear
 from vortex.model.utils import Lambda, column_split, interleave, print_rank_0
 from vortex.logging import initialize_vortex_logger, activations_logger
 
@@ -546,8 +546,9 @@ class StripedHyena(nn.Module):
         self.logger.info(f"Initializing StripedHyena with config: {config}")
         self.embedding_layer = VocabParallelEmbedding(config)
         self.norm = RMSNorm(config) if config.get("final_norm", True) else None
-        self.unembed = self.embedding_layer if config.tie_embeddings else VocabParallelEmbedding(config)
-        self.unembed = Lambda(self.embedding_layer.unembed)
+        # Lambda usage is to be able to use forward() on caller side, which in
+        # turn is needed for PyTorch hooks to work properly.
+        self.unembed = Lambda(self.embedding_layer.unembed) if config.tie_embeddings else VocabParallelUnembedding(config)
 
         if config.get("use_flashfft", "True"):
             try:

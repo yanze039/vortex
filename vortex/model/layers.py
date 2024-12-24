@@ -265,3 +265,8 @@ class VocabParallelEmbedding(nn.Embedding):
             return u @ self.weight.T
         else:
             raise NotImplementedError
+
+
+class VocabParallelUnembedding(VocabParallelEmbedding):
+    def forward(self, input: Tensor) -> Tensor:
+        return self.unembed(input)
