@@ -34,6 +34,7 @@ class Generator:
         skip_special_tokens=False,
         stop_at_eos=True,
         max_seqlen=None,
+        token_callback=lambda i: None,
     ):
         if isinstance(self.tokenizer.eos, int):
             eos_token_ids = torch.LongTensor([self.tokenizer.eos]).to(device)
@@ -123,6 +124,8 @@ class Generator:
                     x,
                     inference_params_dict=inference_params_dict_out,
                 )
+
+            token_callback(i)
 
             last_logits = logits[:, -1]
             if print_generation and verbose and batch_size == 1:
