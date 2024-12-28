@@ -37,7 +37,7 @@ column_split_hyena: False
 column_split: True
 interleave: True
 
-use_fp8_input_projections: False
+use_fp8_input_projections: True
 
 # Legacy options for MP / PP inference
 model_parallel_size: 1
@@ -59,4 +59,4 @@ inference_mode: True
 tokenizer_type: CharLevelTokenizer 
 prefill_style: fft
 mlp_activation: gelu
-print_activations: False
+print_activations: True
