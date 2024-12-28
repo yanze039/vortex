@@ -69,9 +69,10 @@ class TELinear(Linear):
             tp_size=1,
             init_method=init_method,
             params_dtype=params_dtype,
-            parallel_mode="column",
+            parallel_mode=None,
             bias=bias,
             return_bias=self.te_return_bias,
+            device = torch.cuda.current_device(),
             **kwargs,
         )
 
@@ -133,9 +134,8 @@ class RMSNorm(torch.nn.Module):
     def __init__(self, config):
         super(RMSNorm, self).__init__()
         self.eps, self.hidden_size = config.eps, config.hidden_size
-        self.scale = torch.nn.Parameter(torch.ones(self.hidden_size))
+        self.scale = torch.nn.Parameter(torch.ones(self.hidden_size, dtype=config.params_dtype))
         self.register_parameter("scale", self.scale)
-        self.scale = self.scale.to(config.params_dtype)
         self.use_flash_rmsnorm = config.get("use_flash_rmsnorm", False)
 
         if self.use_flash_rmsnorm:

@@ -397,24 +397,33 @@ class ParallelGatedConvBlock(nn.Module):
         self.pre_norm, self.post_norm = RMSNorm(config).to(dtype=dtype), RMSNorm(config).to(dtype=dtype)
         self.filter = HyenaCascade(config, layer_idx, hyena_filter_groups=self.hyena_filter_groups, fir_inner_filter_length=fir_inner_filter_length).to(dtype=dtype)
         
-        if torch.cuda.device_count() > 1:
-            self.projections = nn.Linear(config.hidden_size, 3 * config.hidden_size, bias=config.qkv_proj_bias).to(dtype)
-            print("TELinear and FP8 not yet supported for multi-gpu, defaulting to nn.Linear")
-        else:
-            self.projections = TELinear(
-                config.hidden_size,
-                3 * config.hidden_size,
-                bias=config.qkv_proj_bias,
-                init_method=torch.nn.init.xavier_uniform_,
-                use_fp8=config.get("use_fp8_input_projections", False),
-            )
+        # # if torch.cuda.device_count() != 1:
+        #     self.projections = nn.Linear(config.hidden_size, 3 * config.hidden_size, bias=config.qkv_proj_bias).to(dtype)
+        #     print("TELinear and FP8 not yet supported for n_gpu != 1, defaulting to nn.Linear")
+        # else:
+
+        # self.projections = Linear(
+        #     in_features=config.hidden_size,
+        #     out_features=3 * config.hidden_size,
+        #     params_dtype=torch.bfloat16,
+        #     bias=config.qkv_proj_bias,
+        #     # return_bias=False,
+        # ).to(dtype=dtype)
+
+        self.projections = TELinear(
+            config.hidden_size,
+            3 * config.hidden_size,
+            bias=config.qkv_proj_bias,
+            init_method=torch.nn.init.xavier_uniform_,
+            use_fp8=config.get("use_fp8_input_projections", False),
+        )
             
         
         self.out_filter_dense = nn.Linear(config.hidden_size, config.hidden_size, bias=config.hyena_out_proj_bias).to(dtype)
         self.mlp = ParallelGatedMLP(config, layer_idx).to(dtype=mlp_dtype)
 
-        self.proj_norm_fn = self.proj_norm
-        self.res_mlp_norm_fn = self.res_mlp_norm
+        # self.proj_norm_fn = self.proj_norm
+        # self.res_mlp_norm_fn = self.res_mlp_norm
 
         if self.config.get("compile", False):
             self.proj_norm_fn = torch.compile(self.proj_norm, fullgraph=True, dynamic=False, mode="reduce-overhead")
@@ -449,9 +458,16 @@ class ParallelGatedConvBlock(nn.Module):
                 activations_logger.info(f"pre norm scale: {self.pre_norm.scale}, {self.pre_norm.scale.min()}, {self.pre_norm.scale.max()}")
         
         normalized = self.pre_norm(x)
+        print('post norm')
+        print(torch.mean(torch.abs(normalized)))
         normalized = self.pad_to_multiple(normalized)
-        
+        print('post pad')
+        print(torch.mean(torch.abs(normalized)))
         projected = self.projections(normalized)
+        print("\nTE Linear layer info:")
+        print(f'Layer device: {self.projections.weight.device}')
+        print(f'Layer device: {self.projections.weight}')
+        
         if isinstance(projected, tuple):
             projected = projected[0]
                 
@@ -478,7 +494,7 @@ class ParallelGatedConvBlock(nn.Module):
         return self.mlp(self.post_norm(x)) + x
 
     def forward(self, u, inference_params=None, padding_mask=None, *args, **kwargs):
-        z = self.proj_norm_fn(u)
+        z = self.proj_norm(u)
 
         if type(padding_mask) == torch.Tensor:  # guard against bias
             z = z * padding_mask[..., None]
@@ -515,7 +531,7 @@ class ParallelGatedConvBlock(nn.Module):
         if type(padding_mask) == torch.Tensor:  # guard against bias
             z_in = z_in * padding_mask[..., None]
 
-        y = self.res_mlp_norm_fn(z_in)
+        y = self.res_mlp_norm(z_in)
 
         return y, inference_params
 
@@ -582,16 +598,16 @@ class StripedHyena(nn.Module):
             
             with torch.device(device):
                 block = get_block(config, layer_idx, flash_fft=self.flash_fft)
-                block = move_to_device(block, device)
+                # block.to(device)
+                move_to_device(block, device)
 
             self.blocks.append(block)
             self.block_idx_to_device[layer_idx] = device
             self.logger.info(f"Assigned {layer_idx=} to {device=}")
 
-        # It is important to place last layers on the same device as last block.
         with torch.device(self.block_idx_to_device[0]):
             self.norm = RMSNorm(config) if config.get("final_norm", True) else None
-            if device_idx == 0 and config.tie_embeddings:
+            if config.tie_embeddings:
                 self.unembed = self.embedding_layer
             else:
                 if config.tie_embeddings:
@@ -763,8 +779,23 @@ class StripedHyena(nn.Module):
         """
         Post-processes the state_dict to convert savanna checkpoints to vortex checkpoints.
         """
-        self.logger.info(f"Loading state dict: {state_dict}, with strict: {strict}")
-        self.load_state_dict(state_dict, strict=strict)
+        self.logger.info(f"Loading state dict: {state_dict}, (ignoring extra keys) with strict: {strict}")
+        model_dict = self.state_dict()
+    
+        # Find keys that are in model_dict but not in state_dict
+        missing_in_state_dict = model_dict.keys() - state_dict.keys()
+        # Find keys that are in state_dict but not in model_dict
+        extra_in_state_dict = state_dict.keys() - model_dict.keys()
+        
+        if missing_in_state_dict:
+            print(f"Keys missing in state_dict: {missing_in_state_dict}")
+        if extra_in_state_dict:
+            print(f"Extra keys in state_dict: {extra_in_state_dict}")
+        
+
+        filtered_dict = {k: v for k, v in state_dict.items() if k in model_dict}
+    
+        self.load_state_dict(filtered_dict, strict=strict)
 
         if self.config.get("column_split", True):
             self.logger.info("Adjusting Wqkv for column split (permuting rows)")
