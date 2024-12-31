@@ -240,9 +240,9 @@ class VocabParallelEmbedding(nn.Embedding):
             padding_idx=padding_idx,
         )
 
-    def embed(self, input: Tensor) -> Tensor:
+    def forward(self, input: Tensor) -> Tensor:
         if self.process_group is None:
-            return self.forward(input)
+            return super().forward(input)
         else:
             rank = torch.distributed.get_rank(self.process_group)
             vocab_size = self.num_embeddings
@@ -265,3 +265,8 @@ class VocabParallelEmbedding(nn.Embedding):
             return u @ self.weight.T
         else:
             raise NotImplementedError
+
+
+class VocabParallelUnembedding(VocabParallelEmbedding):
+    def forward(self, input: Tensor) -> Tensor:
+        return self.unembed(input)

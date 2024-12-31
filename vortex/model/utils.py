@@ -112,6 +112,15 @@ def divide(numerator, denominator):
     return numerator // denominator
 
 
+class Lambda(torch.nn.Module):
+    def __init__(self, func):
+        super().__init__()
+        self.func = func
+
+    def forward(self, x):
+        return self.func(x)
+
+
 class VocabUtility:
     """Split the vocabulary into `world_size` chunks amd return the
     first and last index of the vocabulary belonging to the `rank`
