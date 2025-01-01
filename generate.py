@@ -16,6 +16,8 @@ from vortex.model.sample import sample
 from vortex.model.tokenizer import HFAutoTokenizer, CharLevelTokenizer
 from vortex.model.utils import dotdict, print_rank_0
 
+import logging
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Run StripedHyena Model")
     parser.add_argument("--config_path", required=True, help="Path to configuration file")
@@ -40,6 +42,8 @@ if __name__ == "__main__":
     torch.manual_seed(1)
     torch.cuda.manual_seed(1)
     args = parser.parse_args()
+
+    logging.getLogger().setLevel(logging.DEBUG if args.debug else logging.INFO)
 
     config = dotdict(yaml.load(open(args.config_path), Loader=yaml.FullLoader))
 

@@ -13,7 +13,7 @@ from vortex.model.cache import InferenceParams, HyenaCascadeFIRInferenceParams, 
 from vortex.model.engine import HyenaInferenceEngine
 from vortex.model.layers import ParallelGatedMLP, RMSNorm, VocabParallelEmbedding, VocabParallelUnembedding, TELinear
 from vortex.model.utils import Lambda, column_split, interleave, print_rank_0
-from vortex.logging import initialize_vortex_logger, activations_logger
+from vortex.logging import activations_logger, enable_activations_logging
 
 import logging 
 from tqdm import tqdm
@@ -538,9 +538,8 @@ class StripedHyena(nn.Module):
         self.print_activations = config.get("print_activations", False)
 
         if self.print_activations:
-            self.logger = initialize_vortex_logger("basic_logger")
-        else:
-            self.logger = initialize_vortex_logger("basic_logger", level=100)
+            enable_activations_logging()
+        self.logger = logging.getLogger(self.__class__.__name__)
 
         self.ground_truth_activations_path = config.get("ground_truth_activations_path", None)
         self.logger.info(f"Initializing StripedHyena with config: {config}")
@@ -716,7 +715,7 @@ class StripedHyena(nn.Module):
         """
         Post-processes the state_dict to convert savanna checkpoints to vortex checkpoints.
         """
-        self.logger.info(f"Loading state dict: {state_dict}, with strict: {strict}")
+        self.logger.debug(f"Loading state dict: {state_dict}, with strict: {strict}")
         self.load_state_dict(state_dict, strict=strict)
 
         if self.config.get("column_split", True):
