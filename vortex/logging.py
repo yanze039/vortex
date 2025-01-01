@@ -2,6 +2,8 @@ import rich
 import logging
 from rich.logging import RichHandler
 
+LOGGING_FORMAT='%(name)s - %(levelname)s - %(message)s'
+
 def maybe_initialize_root_logger():
     """
     Note: this is no-op if someone already called basicConfig() before.
@@ -9,12 +11,13 @@ def maybe_initialize_root_logger():
     logging.basicConfig(
         level=logging.INFO,
         handlers=[RichHandler(rich_tracebacks=True)],
-        format='%(name)s - %(levelname)s - %(message)s'
+        format=LOGGING_FORMAT,
     )
 
 maybe_initialize_root_logger()
 
 activations_file_handler = logging.FileHandler('activations_debug.log')
+activations_file_handler.setFormatter(logging.Formatter(LOGGING_FORMAT))
 
 def initialize_activations_logger():
     """
