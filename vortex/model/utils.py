@@ -86,8 +86,6 @@ def move_to_device(module, device):
     
     module.to(device)
 
-    return module
-
 
 def get_init_from_string(init_str):
     if type(init_str) == str:

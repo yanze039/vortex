@@ -461,16 +461,16 @@ class ParallelGatedConvBlock(nn.Module):
         print('post norm')
         print(torch.mean(torch.abs(normalized)))
         normalized = self.pad_to_multiple(normalized)
-        print('post pad')
-        print(torch.mean(torch.abs(normalized)))
         projected = self.projections(normalized)
-        print("\nTE Linear layer info:")
-        print(f'Layer device: {self.projections.weight.device}')
-        print(f'Layer device: {self.projections.weight}')
         
         if isinstance(projected, tuple):
             projected = projected[0]
-                
+        print('post proj')
+        print(torch.mean(torch.abs(projected)))
+        print("\nTE Linear layer info:")
+        print(f'Layer device: {self.projections.weight.device}')
+        print(f'Layer device: {self.projections.weight}')
+
         original_seq_len = x.size(1)
         # Slice back to original sequence length if padding was added
         if projected.size(1) > original_seq_len:
@@ -591,6 +591,15 @@ class StripedHyena(nn.Module):
         layers_per_gpu = math.ceil(config.num_layers / num_gpus)
         self.logger.info(f"Distributing across {num_gpus} GPUs, approximately {layers_per_gpu} layers per GPU")
 
+        ### new debug attempt
+        # for layer_idx in range(config.num_layers):
+        #     block = get_block(config, layer_idx, flash_fft=self.flash_fft)
+        #     self.blocks.append(block)
+
+        # self.blocks[layers_per_gpu:].to("cuda:1")
+        
+        # self.block_idx_to_device = {i: f"cuda:{i // layers_per_gpu}" for i in range(config.num_layers)}
+
         for layer_idx in tqdm(range(config.num_layers)):
             # Determine which GPU should handle this layer
             device_idx = min(layer_idx // layers_per_gpu, num_gpus - 1)
@@ -604,6 +613,8 @@ class StripedHyena(nn.Module):
             self.blocks.append(block)
             self.block_idx_to_device[layer_idx] = device
             self.logger.info(f"Assigned {layer_idx=} to {device=}")
+        
+        print(self.block_idx_to_device)
 
         with torch.device(self.block_idx_to_device[0]):
             self.norm = RMSNorm(config) if config.get("final_norm", True) else None
