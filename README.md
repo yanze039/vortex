@@ -8,7 +8,7 @@ Standalone implementation of computational primitives for deep signal processing
 
 ## Interface
 
-While installation of an isolated environment is recommended for generation with `vortex`, we also provide an interface for using the primitives without installation.
+While installation of the a `vortex`-specific environment is recommended for generation with `vortex`, we also provide an interface for using the primitives with a lightweight installation process:
 
 ## Environment setup (uv)
 
