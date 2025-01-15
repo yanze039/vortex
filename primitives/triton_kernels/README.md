@@ -1,1 +1,0 @@
-Kernels for short and medium Hyena in cascade architectures.

@@ -1,27 +1,54 @@
-# Vortex
+<div align="center">
 
-Utilities for efficient inference of deep signal processing models (Hyena, HyenaDNA, StripedHyena2).
+# 🌀 Vortex 🌀
+
+</div>
+
+Standalone implementation of computational primitives for deep signal processing model architectures. For training, please refer to the [savanna](https://github.com/Zymrael/savanna/) project.
+
+## Interface
+
+While installation of an isolated environment is recommended for generation with `vortex`, we also provide an interface for using the primitives without installation.
 
 ## Environment setup (uv)
 
+To run e2e installation in a uv environment, use the following command:
 ```bash
 make setup
 ```
+Note that the `setup` step will compile various CUDA kernels, which usually takes at most several minutes. It may be necessary to customize CUDA header and library paths in `Makefile`.  
 
-To make sure you are using the right uv environment, run `source .venv/bin/activate`
+After installation, use 
+```bash
+source .venv/bin/activate
+```
+to activate the environment.
 
+## Environment setup (conda)
+
+Manually follow the `make setup` steps in your preferred conda environment.
+
+## Environment setup (docker)
+
+TODO
 
 ## Quickstart
 
 ```bash
 python3 generate.py \
-    --config_path /home/zymrael/workspace/stripedhyena-2/configs/shc-evo2-7b-8k-2T-v1.yml \
-    --checkpoint_path /home/zymrael/checkpoints/evo2/7b_13h_8m_8s_3a_cascade15_inference/iter_457500.pt \
-    --input_file prompt.txt \
+    --config_path <PATH_TO_CONFIG> \
+    --checkpoint_path <PATH_TO_CHECKPOINT> \
+    --input_file <PATH_TO_INPUT_FILE> \
     --cached_generation
 ```
+`--cached_generation` turns on KV-caching and custom caching for different variants of Hyena layers.
 
-The flag `--cached_generation` is optional, but recommended for faster generation. 
 
+## Acknowledgements
 
+This project is built and maintained by: 
+
+## Cite
+
+`vortex` provides implementation of deep signal processing primitives spanning many projects: StripedHyena-1 and 2, Evo-1 and 2. If useful, consider citing the following:
 
