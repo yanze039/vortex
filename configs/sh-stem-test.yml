@@ -1,7 +1,6 @@
 model_name: sh-7b-32k-v1
 vocab_size: 32000
 hidden_size: 4096
-# Number of long convolution filters in each hyena block. Can be smaller than `hidden_size`
 num_filters: 4096
 attn_layer_idxs: []
 hyena_layer_idxs: [0, 1, 2, 3]
