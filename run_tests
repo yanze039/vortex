@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+set -e -o pipefail
+
+cd "$(dirname "$0")"
+
+ckpt=--checkpoint_path=iter_500000.pt
+cfg=--config_path=configs/shc-evo2-7b-8k-2T-v2.yml
+
+export PYTHONPATH=.
+
+python3 test/accuracy_test_generation.py $ckpt $cfg
+python3 test/accuracy_test_forward.py    $ckpt $cfg

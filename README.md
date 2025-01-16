@@ -1,11 +1,46 @@
 # Vortex
 
-Utilities for efficient inference and training of deep signal processing models.
-
+Utilities for efficient inference of deep signal processing models (Hyena, HyenaDNA, StripedHyena2).
 
 ## Inference
 
-Set up the environment, then run:
+### In Docker environment
+
+To run 40b generation sample, simply execute:
+
+```bash
+./run
+```
+
+To run 7b generation sample, simply execute:
+
+```bash
+sz=7 ./run
+```
+
+To run tests:
+
+```bash
+./run ./run_tests
+```
+
+To interactively execute commands in docker environment:
+
+```bash
+./run bash
+```
+
+### Without Docker
+
+#### Environment setup (uv)
+
+```bash
+make setup
+```
+
+To make sure you are using the right uv environment, run `source .venv/bin/activate`
+
+#### Run generation script
 
 ```bash
 python3 generate.py \
@@ -15,9 +50,4 @@ python3 generate.py \
     --cached_generation
 ```
 
-The flag `--cached_generation` is optional, but recommended for faster generation. 
-
-## Kernels
-
-
-
+The flag `--cached_generation` is optional, but recommended for faster generation.
