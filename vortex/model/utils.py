@@ -141,6 +141,25 @@ def fixup_fp8_extra_states(module):
         with patch('torch.load', new=overriden_load):
             module.set_extra_state(module.get_extra_state())
 
+def fixup_te_workspace():
+    """TE uses single workspace tensor for all calls, disregarding that inputs
+    may be on separate GPUs. This patches TE's Linear module to use per-device
+    workspaces."""
+    from functools import lru_cache
+    @lru_cache
+    def te_cublas_get_workspace_per_device(device):
+        log.info(f"Fixup applied: Allocating cublas workspace for {device=}")
+        import transformer_engine.pytorch.module.base as tebase
+        with torch.cuda.device(device):
+            tebase._cublas_workspace = None # Force get_workspace() to reallocate tensor
+            return tebase.get_workspace()
+
+    def get_workspace():
+        return te_cublas_get_workspace_per_device(torch.cuda.current_device())
+
+    import transformer_engine.pytorch.module.linear as telinear
+    telinear.get_workspace = get_workspace
+
 def get_init_from_string(init_str):
     if type(init_str) == str:
         if init_str == "torch.nn.init.zeros_":

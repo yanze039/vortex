@@ -18,7 +18,7 @@ from vortex.model.layers import (
     VocabParallelUnembedding,
     TELinear,
 )
-from vortex.model.utils import Lambda, column_split, interleave, print_rank_0, move_to_device, fixup_fp8_extra_states
+from vortex.model.utils import Lambda, column_split, interleave, print_rank_0, move_to_device, fixup_fp8_extra_states, fixup_te_workspace
 from vortex.logging import activations_logger, enable_activations_logging
 
 import logging
@@ -463,7 +463,7 @@ class ParallelGatedConvBlock(nn.Module):
         ).to(dtype=dtype)
 
         # For posterity/debugging: TELinear can be easily replaced by
-        # nn.Linear(config.hidden_size, 3 * config.hidden_size, bias=config.qkv_proj_bias)
+        # nn.Linear(config.hidden_size, 3 * config.hidden_size, bias=config.qkv_proj_bias).to(dtype=dtype)
         # which sometimes is very useful when debugging FP8.
         self.projections = TELinear(
             config.hidden_size,
@@ -675,6 +675,8 @@ def get_block(config, layer_idx, flash_fft=None):
 class StripedHyena(nn.Module):
     def __init__(self, config):
         super().__init__()
+        fixup_te_workspace() # Workaround global cublas workspaces in TE
+
         self.config = config
         self.print_activations = config.get("print_activations", False)
 
@@ -715,8 +717,13 @@ class StripedHyena(nn.Module):
             device = f"cuda:{device_idx}" if torch.cuda.is_available() else "cpu"
 
             with torch.device(device):
-                block = get_block(config, layer_idx, flash_fft=self.flash_fft)
-                move_to_device(block, device)
+                # TELinear uses `device="cuda"` device to allocate empty bias
+                # tensor. This makes sure that the empty tensor is allocated on the
+                # correct device. (torch.device(), unlike torch.cuda.device(),
+                # doesn't override current CUDA device.)
+                with torch.cuda.device(device):
+                    block = get_block(config, layer_idx, flash_fft=self.flash_fft)
+                    move_to_device(block, device)
 
             self.blocks.append(block)
             self.block_idx_to_device[layer_idx] = device
