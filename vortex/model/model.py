@@ -1000,7 +1000,7 @@ class StripedHyena(nn.Module):
                         except:
                             pass
 
-    def to_bfloat16_except_pr_lc(self):
+    def to_bfloat16_except_pr_lc(self, to_float32=False):
         """Convert all parameters to bfloat16 except for the poles and residues.
 
         Particularly important for longer prompts.
@@ -1013,3 +1013,6 @@ class StripedHyena(nn.Module):
                 and p.shape not in excluded_shapes
             ):
                 p.data = p.data.to(torch.bfloat16)
+            else:
+                if to_float32:
+                    p.data = p.data.to(torch.float32)

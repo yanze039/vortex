@@ -101,6 +101,8 @@ def load_checkpoint(model, checkpoint_path):
             # security issues.
             weights_only=True,
         )
+        model.to_bfloat16_except_pr_lc(to_float32=True)
+
         model.custom_load_state_dict(state)
 
         model.to_bfloat16_except_pr_lc()

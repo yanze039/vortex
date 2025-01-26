@@ -27,7 +27,7 @@ def read_prompts(
     return promptseqs
 
 def mid_point_split(*, seq, num_tokens):
-    mid_point = 3*(len(seq)//4)
+    mid_point = 1*(len(seq)//4)
     prompt = seq[:mid_point]
     target = seq[mid_point:mid_point+num_tokens] #Only compare to the section of sequence directly
     return prompt, target
@@ -118,7 +118,7 @@ def main():
     parser = argparse.ArgumentParser(description="Run StripedHyena Model")
     parser.add_argument("--config_path", required=True, help="Path to configuration file")
     parser.add_argument("--checkpoint_path", default=None, help="Path to checkpoint file")
-    parser.add_argument("--num_tokens", default=500, help="Number of tokens to generate.")
+    parser.add_argument("--num_tokens", default=500, type=int, help="Number of tokens to generate.")
     parser.add_argument("--temperature", default=0.7, type=float)
     parser.add_argument("--top_k", default=4, type=int)
     parser.add_argument("--top_p", default=1.0, type=float)
@@ -142,8 +142,8 @@ def main():
         tokenizer = HFAutoTokenizer(config.vocab_file)
     
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-    with torch.device(device):
-        m = StripedHyena(config).to(torch.float32)
+    
+    m = StripedHyena(config)
 
     load_checkpoint(m, checkpoint_path=args.checkpoint_path)
 
