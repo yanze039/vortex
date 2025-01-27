@@ -1006,6 +1006,7 @@ class StripedHyena(nn.Module):
         Particularly important for longer prompts.
         """
         excluded_shapes = [(4096, 1, 128)]
+
         for k, p in self.named_parameters():
             if (
                 "log_poles" not in k
@@ -1016,3 +1017,9 @@ class StripedHyena(nn.Module):
             else:
                 if to_float32:
                     p.data = p.data.to(torch.float32)
+        for k, b in self.named_buffers():
+            if "inv_freq" in k:
+                if to_float32:
+                    b.data = b.data.to(torch.float32)
+            else:
+                b.data = b.data.to(torch.bfloat16)
