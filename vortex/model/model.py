@@ -733,18 +733,19 @@ class StripedHyena(nn.Module):
             )
 
         with torch.device(self.block_idx_to_device[0]):
-            self.norm = RMSNorm(config) if config.get("final_norm", True) else None
-            if config.tie_embeddings:
-                # Lambda usage is to be able to use forward() on caller side, which in
-                # turn is needed for PyTorch hooks to work properly.
-                self.unembed = Lambda(self.embedding_layer.unembed)
-            else:
+            with torch.cuda.device(self.block_idx_to_device[0]):
+                self.norm = RMSNorm(config) if config.get("final_norm", True) else None
                 if config.tie_embeddings:
-                    # Technically we can support this mode, just need to
-                    # copy tensors across GPUs then. But let's implement it
-                    # once/if needed.
-                    self.logger.info("Ignoring tie_embeddings for now.")
-                self.unembed = VocabParallelUnembedding(config)
+                    # Lambda usage is to be able to use forward() on caller side, which in
+                    # turn is needed for PyTorch hooks to work properly.
+                    self.unembed = Lambda(self.embedding_layer.unembed)
+                else:
+                    if config.tie_embeddings:
+                        # Technically we can support this mode, just need to
+                        # copy tensors across GPUs then. But let's implement it
+                        # once/if needed.
+                        self.logger.info("Ignoring tie_embeddings for now.")
+                    self.unembed = VocabParallelUnembedding(config)
 
         self.logger.info("Initialized model")
 
@@ -871,10 +872,16 @@ class StripedHyena(nn.Module):
 
         return x, None
 
-    def initialize_inference_params(self):
+    def initialize_inference_params(self, max_seq_len=None):
+        # input seqlen takes priority over config
+        # WARNING: This avoids errors but means the model can be used beyond length it was trained at
+        config_seqlen = self.config.get("max_seq_len", 8192)
+        effective_seq_len = max_seq_len if max_seq_len !=None else config_seqlen
+        print(f"Initializing inference params with max_seq_len={max_seq_len}")
+
         inference_params_dict = {
             "mha": InferenceParams(
-                max_seqlen=self.config.get("max_seqlen", 8192),
+                max_seqlen=effective_seq_len,
                 max_batch_size=self.config.get("max_batch_size", 1),
                 seqlen_offset=0,
             ),
@@ -1015,17 +1022,18 @@ class StripedHyena(nn.Module):
         excluded_shapes = [(4096, 1, 128)]
         for k, p in self.named_parameters():
             if (
-                "log_poles" not in k
-                and "residues" not in k
-                and p.shape not in excluded_shapes
+                "projections" not in k # avoid TE linears
             ):
-                p.data = p.data.to(torch.bfloat16)
-            else:
-                if to_float32:
-                    p.data = p.data.to(torch.float32)
+                if (
+                    "log_poles" not in k
+                    and "residues" not in k
+                    and p.shape not in excluded_shapes
+                ):
+                    p.data = p.data.to(torch.bfloat16)
+                else:
+                    if to_float32:
+                        p.data = p.data.to(torch.float32)
         for k, b in self.named_buffers():
             if "inv_freq" in k:
                 if to_float32:
                     b.data = b.data.to(torch.float32)
-            else:
-                b.data = b.data.to(torch.bfloat16)

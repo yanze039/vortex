@@ -75,7 +75,7 @@ class Generator:
         )
 
         if cached_generation:
-            inference_params_dict_out = self.model.initialize_inference_params()
+            inference_params_dict_out = self.model.initialize_inference_params(max_seq_len=tot_length)
             inference_params_dict_out["mha"].max_batch_size = batch_size
             inference_params_dict_out["hcl"].max_batch_size = batch_size
             inference_params_dict_out["hcm"].max_batch_size = batch_size
@@ -134,8 +134,9 @@ class Generator:
                 temperature=self.temperature,
             )
 
-            if stop_at_eos and (generation[0, -2:] == eos_token_ids).all():
-                print_rank_0("Stopping generation at EOS")
+            # if stop_at_eos and (generation[0, -2:] == eos_token_ids).all():
+            #     print_rank_0("Stopping generation at EOS")
+            #     break
 
             if print_generation and verbose and batch_size == 1:
                 print_rank_0(
