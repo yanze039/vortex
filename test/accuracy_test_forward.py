@@ -16,7 +16,7 @@ from vortex.model.generation import Generator
 from vortex.model.model import StripedHyena
 from vortex.model.sample import sample
 from vortex.model.tokenizer import HFAutoTokenizer, CharLevelTokenizer
-from vortex.model.utils import dotdict, print_rank_0
+from vortex.model.utils import dotdict, print_rank_0, load_checkpoint
 
 def test_dna_model(model, device='cuda:0'):
     """
@@ -32,8 +32,9 @@ def test_dna_model(model, device='cuda:0'):
         tuple: (original sequence, predicted sequence, accuracy)
     """
     # Test sequence: E. coli BD1 16S ribosomal RNA gene, a conserved gene
-    seq = "AAATTGAAGAGTTTGATCATGGCTCAGATTGAACGCTGGCGGCAGGCCTAACACATGCAAGTCGAACGGTAACAGGAAGAAGCTTGCTCTTTGCTGACGAGTGGCGGACGGGTGAGTAATGTCTGGGAAACTGCCTGATGGAGGGGGATAACTACTGGAAACGGTAGCTAATACCGCATAACGTCGCAAGACCAAAGAGGGGGACCTTCGGGCCTCTTGCCATCGGATGTGCCCAGATGGGATTAGCTAGTAGGTGGGGTAACGGCTCACCTAGGCGACGATCCCTAGCTGGTCTGAGAGGATGACCAGCCACACTGGAACTGAGACACGGTCCAGACTCCTACGGGAGGCAGCAGTGGGGAATATTGCACAATGGGCGCAAGCCTGATGCAGCCATGCCGCGTGTATGAAGAAGGCCTTCGGGTTGTAAAGTACTTTCAGCGGGGAGGAAGGGAGTAAAGTTAATACCTTTGCTCATTGACGTTACCCGCAGAAGAAGCACCGGCTAACTCCGTGCCAGCAGCCGCGGTAATACGGAGGGTGCAAGCGTTAATCGGAATTACTGGGCGTAAAGCGCACGCAGGCGGTTTGTTAAGTCA"
-    
+    # seq = "AAATTGAAGAGTTTGATCATGGCTCAGATTGAACGCTGGCGGCAGGCCTAACACATGCAAGTCGAACGGTAACAGGAAGAAGCTTGCTCTTTGCTGACGAGTGGCGGACGGGTGAGTAATGTCTGGGAAACTGCCTGATGGAGGGGGATAACTACTGGAAACGGTAGCTAATACCGCATAACGTCGCAAGACCAAAGAGGGGGACCTTCGGGCCTCTTGCCATCGGATGTGCCCAGATGGGATTAGCTAGTAGGTGGGGTAACGGCTCACCTAGGCGACGATCCCTAGCTGGTCTGAGAGGATGACCAGCCACACTGGAACTGAGACACGGTCCAGACTCCTACGGGAGGCAGCAGTGGGGAATATTGCACAATGGGCGCAAGCCTGATGCAGCCATGCCGCGTGTATGAAGAAGGCCTTCGGGTTGTAAAGTACTTTCAGCGGGGAGGAAGGGAGTAAAGTTAATACCTTTGCTCATTGACGTTACCCGCAGAAGAAGCACCGGCTAACTCCGTGCCAGCAGCCGCGGTAATACGGAGGGTGCAAGCGTTAATCGGAATTACTGGGCGTAAAGCGCACGCAGGCGGTTTGTTAAGTCA"
+    seq = 'A'*8192
+
     input_ids = torch.tensor(
         tokenizer.tokenize(seq),
         dtype=torch.int,
@@ -41,6 +42,10 @@ def test_dna_model(model, device='cuda:0'):
 
     with torch.no_grad():
         output1, _ = model.forward(input_ids)
+    
+    #save output1 for debugging
+    # torch.save(output1, "40b_504k_logits_16srrnagene.pt")
+
     logprobs = torch.log_softmax(output1[:, :-1, :], dim=-1)
     chars = torch.argmax(logprobs, dim=-1)
 
@@ -100,14 +105,8 @@ if __name__ == "__main__":
     else:
         tokenizer = HFAutoTokenizer(config.vocab_file)
     
-    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-    with torch.device(device):
-        m = StripedHyena(config).to(torch.float32)
+    m = StripedHyena(config)
 
-    with torch.inference_mode():
-        m.custom_load_state_dict(torch.load(args.checkpoint_path, map_location=device), strict=False)
-
-    m = m.to(device)
-    m.to_bfloat16_except_pr_lc()
+    load_checkpoint(m, checkpoint_path=args.checkpoint_path)
 
     test_dna_model(m)

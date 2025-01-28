@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+cd "$(dirname "$0")"
+export DOCKER_BUILD_ARGS="--build-arg REQUIREMENTS=requirements.txt"
+export DOCKER_RUN_ARGS=--tty=false # prevents docker from writing \r\n as end-of-line
+out=requirements.txt.frozen.new
+./run pip freeze | grep -v file:// > "$out"
+echo Froze requirements to "$out"

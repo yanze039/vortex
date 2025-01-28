@@ -1,5 +1,6 @@
 # Copyright (c) 2024, Michael Poli.
 
+import math
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -17,7 +18,7 @@ from vortex.model.layers import (
     VocabParallelUnembedding,
     TELinear,
 )
-from vortex.model.utils import Lambda, column_split, interleave, print_rank_0
+from vortex.model.utils import Lambda, column_split, interleave, print_rank_0, move_to_device, fixup_fp8_extra_states
 from vortex.logging import activations_logger, enable_activations_logging
 
 import logging
@@ -249,6 +250,7 @@ class HyenaCascade(nn.Module):
         )
         if self.print_activations:
             activations_logger.info(f"pre 1 parallel fir: {u}, {u.min()}, {u.max()}")
+
         z_pre, fir_state = self.engine.parallel_fir(
             self.fir_fn,
             u,
@@ -263,6 +265,7 @@ class HyenaCascade(nn.Module):
             padding_mask=padding_mask,
             dim_last=True,
         )
+
         if inference_params:
             inference_params.fir_state_dict[self.layer_idx] = fir_state
 
@@ -275,6 +278,7 @@ class HyenaCascade(nn.Module):
             h = self.h
 
         D = self.D
+
         if self.hyena_filter_groups > 1:
             h = h.repeat_interleave(self.hidden_size // self.hyena_filter_groups, 0)
 
@@ -457,6 +461,10 @@ class ParallelGatedConvBlock(nn.Module):
             hyena_filter_groups=self.hyena_filter_groups,
             fir_inner_filter_length=fir_inner_filter_length,
         ).to(dtype=dtype)
+
+        # For posterity/debugging: TELinear can be easily replaced by
+        # nn.Linear(config.hidden_size, 3 * config.hidden_size, bias=config.qkv_proj_bias)
+        # which sometimes is very useful when debugging FP8.
         self.projections = TELinear(
             config.hidden_size,
             3 * config.hidden_size,
@@ -465,14 +473,13 @@ class ParallelGatedConvBlock(nn.Module):
             use_fp8=config.get("use_fp8_input_projections", False),
         )
 
-        nn.Linear(config.hidden_size, 3 * config.hidden_size, bias=config.qkv_proj_bias)
         self.out_filter_dense = nn.Linear(
             config.hidden_size, config.hidden_size, bias=config.hyena_out_proj_bias
         ).to(dtype)
         self.mlp = ParallelGatedMLP(config, layer_idx).to(dtype=mlp_dtype)
 
-        self.proj_norm_fn = self.proj_norm
-        self.res_mlp_norm_fn = self.res_mlp_norm
+        # self.proj_norm_fn = self.proj_norm
+        # self.res_mlp_norm_fn = self.res_mlp_norm
 
         if self.config.get("compile", False):
             self.proj_norm_fn = torch.compile(
@@ -524,15 +531,16 @@ class ParallelGatedConvBlock(nn.Module):
                     f"pre norm scale: {self.pre_norm.scale}, {self.pre_norm.scale.min()}, {self.pre_norm.scale.max()}"
                 )
 
-        original_seq_len = x.size(1)
         normalized = self.pre_norm(x)
         normalized = self.pad_to_multiple(normalized)
-        projected = self.projections(normalized)
+        with torch.cuda.device(x.device):
+            projected = self.projections(normalized)
+
+        if isinstance(projected, tuple):
+            projected = projected[0]
 
         original_seq_len = x.size(1)
         # Slice back to original sequence length if padding was added
-        if isinstance(projected, tuple):
-            projected = projected[0]
         if projected.size(1) > original_seq_len:
             projected = projected[:, :original_seq_len, :]
 
@@ -570,7 +578,7 @@ class ParallelGatedConvBlock(nn.Module):
         return self.mlp(self.post_norm(x)) + x
 
     def forward(self, u, inference_params=None, padding_mask=None, *args, **kwargs):
-        z = self.proj_norm_fn(u)
+        z = self.proj_norm(u)
 
         if type(padding_mask) == torch.Tensor:  # guard against bias
             z = z * padding_mask[..., None]
@@ -631,7 +639,7 @@ class ParallelGatedConvBlock(nn.Module):
         if type(padding_mask) == torch.Tensor:  # guard against bias
             z_in = z_in * padding_mask[..., None]
 
-        y = self.res_mlp_norm_fn(z_in)
+        y = self.res_mlp_norm(z_in)
 
         return y, inference_params
 
@@ -678,15 +686,9 @@ class StripedHyena(nn.Module):
             "ground_truth_activations_path", None
         )
         self.logger.info(f"Initializing StripedHyena with config: {config}")
-        self.embedding_layer = VocabParallelEmbedding(config)
-        self.norm = RMSNorm(config) if config.get("final_norm", True) else None
-        # Lambda usage is to be able to use forward() on caller side, which in
-        # turn is needed for PyTorch hooks to work properly.
-        self.unembed = (
-            Lambda(self.embedding_layer.unembed)
-            if config.tie_embeddings
-            else VocabParallelUnembedding(config)
-        )
+
+        with torch.device("cuda:0" if torch.cuda.is_available() else "cpu"):
+            self.embedding_layer = VocabParallelEmbedding(config)
 
         if config.get("use_flashfft", "True"):
             try:
@@ -700,11 +702,42 @@ class StripedHyena(nn.Module):
 
         self.logger.info(f"Initializing {config.num_layers} blocks...")
         self.blocks = nn.ModuleList()
+        self.block_idx_to_device = {}
+
+        # Calculate layers per GPU
+        num_gpus = torch.cuda.device_count() if torch.cuda.is_available() else 1
+        layers_per_gpu = math.ceil(config.num_layers / num_gpus)
+        self.logger.info(f"Distributing across {num_gpus} GPUs, approximately {layers_per_gpu} layers per GPU")
+
         for layer_idx in tqdm(range(config.num_layers)):
-            self.blocks.append(get_block(config, layer_idx, flash_fft=self.flash_fft))
+            # Determine which GPU should handle this layer
+            device_idx = min(layer_idx // layers_per_gpu, num_gpus - 1)
+            device = f"cuda:{device_idx}" if torch.cuda.is_available() else "cpu"
+
+            with torch.device(device):
+                block = get_block(config, layer_idx, flash_fft=self.flash_fft)
+                move_to_device(block, device)
+
+            self.blocks.append(block)
+            self.block_idx_to_device[layer_idx] = device
+            self.logger.info(f"Assigned {layer_idx=} to {device=}")
             self.logger.info(
                 f"Parameter count for block {layer_idx}: {sum(p.numel() for p in self.blocks[-1].parameters())}"
             )
+
+        with torch.device(self.block_idx_to_device[0]):
+            self.norm = RMSNorm(config) if config.get("final_norm", True) else None
+            if config.tie_embeddings:
+                # Lambda usage is to be able to use forward() on caller side, which in
+                # turn is needed for PyTorch hooks to work properly.
+                self.unembed = Lambda(self.embedding_layer.unembed)
+            else:
+                if config.tie_embeddings:
+                    # Technically we can support this mode, just need to
+                    # copy tensors across GPUs then. But let's implement it
+                    # once/if needed.
+                    self.logger.info("Ignoring tie_embeddings for now.")
+                self.unembed = VocabParallelUnembedding(config)
 
         self.logger.info("Initialized model")
 
@@ -730,7 +763,9 @@ class StripedHyena(nn.Module):
 
         if self.print_activations:
             activations_logger.info(f"pre norm: {x}, {x.min()}, {x.max()}")
-
+        
+        # By convention, we return results on the first device
+        x = x.to(self.block_idx_to_device[0])
         x = self.norm(x)
 
         if self.print_activations:
@@ -753,6 +788,11 @@ class StripedHyena(nn.Module):
         else:
             raise ValueError(f"Block index {block_idx} not found")
 
+    def cross_device_transfer(self, x, block_idx):
+        if self.block_idx_to_device[max(block_idx-1, 0)] != self.block_idx_to_device[block_idx]:
+            x = x.to(self.block_idx_to_device[block_idx])
+        return x
+
     def stateful_forward(self, x, inference_params_dict=None):
         for block_idx, block in enumerate(self.blocks):
             inference_params = inference_params_dict[self.block_idx_to_name(block_idx)]
@@ -770,6 +810,7 @@ class StripedHyena(nn.Module):
                         f"pre block {block_idx} activation_diff: {activation_diff.max()}, {activation_diff.mean()}"
                     )
 
+            x = self.cross_device_transfer(x, block_idx)
             x, _ = block(x, inference_params=inference_params)
 
             if self.print_activations:
@@ -805,7 +846,9 @@ class StripedHyena(nn.Module):
                         f"pre block {block_idx} activation_diff: {activation_diff.max()}, {activation_diff.mean()}"
                     )
 
+            x = self.cross_device_transfer(x, block_idx)
             x, _ = block(x, inference_params=None, padding_mask=padding_mask)
+
             if self.print_activations:
                 activations_logger.info(
                     f"post block {block_idx}: {x}, {x.min()}, {x.max()}"
@@ -892,13 +935,36 @@ class StripedHyena(nn.Module):
         """
         Post-processes the state_dict to convert savanna checkpoints to vortex checkpoints.
         """
-        self.logger.debug(f"Loading state dict: {state_dict}, with strict: {strict}")
-        self.load_state_dict(state_dict, strict=strict)
+        self.logger.debug(f"Loading state dict: {state_dict}, (ignoring extra keys) with strict: {strict}")
+        model_dict = self.state_dict()
+
+        # Find keys that are in model_dict but not in state_dict
+        missing_in_state_dict = model_dict.keys() - state_dict.keys()
+        # Find keys that are in state_dict but not in model_dict
+        extra_in_state_dict = state_dict.keys() - model_dict.keys()
+
+        if missing_in_state_dict:
+            print(f"Keys missing in state_dict: {missing_in_state_dict}")
+        if extra_in_state_dict:
+            print(f"Extra keys in state_dict: {extra_in_state_dict}")
+
+
+        filtered_dict = {k: v for k, v in state_dict.items() if k in model_dict}
+
+        if all("._extra_state" in k for k in missing_in_state_dict):
+            self.logger.info("Checkpoint has no FP8 extra state, will be using initial state.")
+            for k in missing_in_state_dict:
+                filtered_dict[k] = None
+
+        self.load_state_dict(filtered_dict, strict=strict)
+        fixup_fp8_extra_states(self)
 
         if self.config.get("column_split", True):
             self.logger.info("Adjusting Wqkv for column split (permuting rows)")
             for layer_idx, block in enumerate(self.blocks):
                 if type(block) == AttentionBlock:
+                    target_device = block.inner_mha_cls.Wqkv.weight.device
+
                     Wqkv = state_dict[f"blocks.{layer_idx}.inner_mha_cls.Wqkv.weight"]
                     try:
                         bias = state_dict[f"blocks.{layer_idx}.inner_mha_cls.Wqkv.bias"]
@@ -917,9 +983,12 @@ class StripedHyena(nn.Module):
                     Wv = Wv.reshape(block.hidden_size, -1)
                     Wqkv = torch.cat([Wq, Wk, Wv], dim=-1)
                     Wqkv = Wqkv.permute(1, 0)
-                    block.inner_mha_cls.Wqkv.weight.data = Wqkv
+
+                    # Single device transfer at the end
+                    block.inner_mha_cls.Wqkv.weight.data = Wqkv.to(target_device)
 
                     if bias is not None:
+                        bias = bias.cpu()  # Process on CPU
                         bias = bias.reshape(block.num_attention_heads, 3, size_att_head)
                         bias_q, bias_k, bias_v = bias.unbind(dim=-2)
                         bias_q = bias_q.reshape(block.hidden_size)
@@ -927,12 +996,11 @@ class StripedHyena(nn.Module):
                         bias_v = bias_v.reshape(block.hidden_size)
                         bias = torch.cat([bias_q, bias_k, bias_v], dim=0)
                         try:
-                            block.inner_mha_cls.Wqkv.bias.data = bias
+                            block.inner_mha_cls.Wqkv.bias.data = bias.to(target_device)
                         except:
-                            # catch cases with strict_load False and spurious biases in the checkpoint
                             pass
 
-    def to_bfloat16_except_pr_lc(self):
+    def to_bfloat16_except_pr_lc(self, to_float32=False):
         """Convert all parameters to bfloat16 except for the poles and residues.
 
         Particularly important for longer prompts.
@@ -945,3 +1013,12 @@ class StripedHyena(nn.Module):
                 and p.shape not in excluded_shapes
             ):
                 p.data = p.data.to(torch.bfloat16)
+            else:
+                if to_float32:
+                    p.data = p.data.to(torch.float32)
+        for k, b in self.named_buffers():
+            if "inv_freq" in k:
+                if to_float32:
+                    b.data = b.data.to(torch.float32)
+            else:
+                b.data = b.data.to(torch.bfloat16)
