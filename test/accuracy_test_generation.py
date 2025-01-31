@@ -32,11 +32,12 @@ def mid_point_split(*, seq, num_tokens):
     target = seq[mid_point:mid_point+num_tokens] #Only compare to the section of sequence directly
     return prompt, target
 
-def generate_and_score(sequences, generator, tokenizer, args, generations_per_prompt=5, device='cuda:0'):
+def generate_and_score(*, sequences, model, tokenizer, args, generations_per_prompt=5, device='cuda:0'):
     """
     Prompt with first half, generate and score on 2nd half
     """
     import torch
+    from vortex.model.generation import generate
 
     scores = []
     prompts = []
@@ -56,16 +57,20 @@ def generate_and_score(sequences, generator, tokenizer, args, generations_per_pr
 
         with torch.inference_mode():
             # for tokenized_prompt in tokenized_prompts:
-            generated_seq = generator.generate(
-                num_tokens=args.num_tokens,
-                cached_generation=args.cached_generation,
-                input_string=prompt,
+
+            ret = generate(
+                prompt_seqs=[prompt],
+                n_tokens=args.num_tokens,
+                model=model,
+                tokenizer=tokenizer,
+                top_k=args.top_k,
+                top_p=args.top_p,
+                temperature=args.temperature,
                 device=device,
-                verbose=False,
-                print_generation=False,
-                max_seqlen=8192
-            )[0].cpu().numpy()[0]
-            decoded_seq = tokenizer.detokenize(generated_seq)
+                verbose=2,
+            )
+
+            decoded_seq = ret.sequences[0]
             score = calculate_sequence_identity(decoded_seq, target)
             scores.append(score)
     
@@ -110,7 +115,7 @@ def main():
     '''
     import torch
 
-    from vortex.model.generation import Generator
+    from vortex.model.generation import generate
     from vortex.model.model import StripedHyena
     from vortex.model.tokenizer import HFAutoTokenizer, CharLevelTokenizer
     from vortex.model.utils import dotdict, load_checkpoint
@@ -147,12 +152,16 @@ def main():
 
     load_checkpoint(m, checkpoint_path=args.checkpoint_path)
 
-    g = Generator(m, tokenizer, top_k=args.top_k, top_p=args.top_p, temperature=args.temperature)
-
     sequences = read_prompts('./test/data/prompts.csv')
 
-    scores = generate_and_score(sequences, g, tokenizer, args, generations_per_prompt=args.generations_per_prompt)
-    
+    scores = generate_and_score(
+        sequences=sequences,
+        model=m,
+        tokenizer=tokenizer,
+        args=args,
+        generations_per_prompt=args.generations_per_prompt
+    )
+
     print(scores)
     print("\% Matching Nucleotides")
     print(np.mean(scores))
