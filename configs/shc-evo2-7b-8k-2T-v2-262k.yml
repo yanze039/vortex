@@ -48,7 +48,7 @@ hyena_out_proj_bias: True
 hyena_flip_x1x2: False
 qkv_proj_bias: False
 use_fp8_input_projections: True
-max_seqlen: 32768
+max_seqlen: 262144
 max_batch_size: 1
 final_norm: True 
 use_flash_attn: True
