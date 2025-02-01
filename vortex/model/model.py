@@ -872,12 +872,12 @@ class StripedHyena(nn.Module):
 
         return x, None
 
-    def initialize_inference_params(self, max_seq_len=None):
+    def initialize_inference_params(self, max_seqlen=None):
         # input seqlen takes priority over config
         # WARNING: This avoids errors but means the model can be used beyond length it was trained at
         config_seqlen = self.config.get("max_seq_len", 8192)
-        effective_seq_len = max_seq_len if max_seq_len !=None else config_seqlen
-        print(f"Initializing inference params with max_seq_len={max_seq_len}")
+        effective_seq_len = max_seqlen if max_seqlen !=None else config_seqlen
+        print(f"Initializing inference params with max_seq_len={max_seqlen}")
 
         inference_params_dict = {
             "mha": InferenceParams(
