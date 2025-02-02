@@ -252,6 +252,8 @@ def generate(
     top_p: float = 1.,
     batched: bool = True,
     prepend_bos: bool = False,
+    force_prompt_threshold: int = 1000,
+    cached_generation: bool = True,
     verbose: int = 1,
     device: str = 'cuda:0',
     **kwargs,
@@ -305,6 +307,8 @@ def generate(
             print_generation=(verbose > 1),
             verbose=(verbose > 1),
             stop_at_eos=False,
+            force_prompt_threshold=force_prompt_threshold,
+            cached_generation=cached_generation,
             **kwargs,
         )
 
