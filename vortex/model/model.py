@@ -873,15 +873,20 @@ class StripedHyena(nn.Module):
         return x, None
 
     def initialize_inference_params(self, max_seqlen=None):
-        # input seqlen takes priority over config
-        # WARNING: This avoids errors but means the model can be used beyond length it was trained at
-        config_seqlen = self.config.get("max_seq_len", 8192)
-        effective_seq_len = max_seqlen if max_seqlen !=None else config_seqlen
-        print(f"Initializing inference params with max_seq_len={max_seqlen}")
+        ## Input seqlen takes priority over config!
+        ## WARNING: This avoids potential errors but means the model can be used beyond length it was trained at
+        config_seqlen = self.config.get("max_seqlen", None)
+        if config_seqlen is None:
+            print("No max_seqlen found in config!!! using default value of 8192")
+            config_seqlen = 8192
+        new_max_seqlen = max_seqlen if max_seqlen !=None else config_seqlen
+        # self.config["max_seqlen"] = new_max_seqlen
+        ## Note: changing the stored config max_seqlen will change the max_seqlen used in flash attention, leading to minor logit differences
+        print(f"Initializing inference params with max_seqlen={new_max_seqlen}")
 
         inference_params_dict = {
             "mha": InferenceParams(
-                max_seqlen=effective_seq_len,
+                max_seqlen=new_max_seqlen,
                 max_batch_size=self.config.get("max_batch_size", 1),
                 seqlen_offset=0,
             ),

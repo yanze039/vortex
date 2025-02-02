@@ -25,7 +25,7 @@ class Generator:
         input_ids: torch.Tensor = None,
         num_tokens: int = 32,
         cached_generation: bool = True,
-        force_prompt_threshold: int = 500,
+        force_prompt_threshold: int = 1000,
         print_generation: bool = True,
         verbose: bool = False,
         skip_special_tokens: bool = False,
@@ -109,7 +109,7 @@ class Generator:
                     inference_params_dict['hcs'].state_dict[key] = data.to(x.device)
             inference_params_dict["mha"].max_batch_size = batch_size
         elif cached_generation:
-            inference_params_dict = self.model.initialize_inference_params(max_seq_len=tot_length)
+            inference_params_dict = self.model.initialize_inference_params(max_seqlen=tot_length)
             inference_params_dict["mha"].max_batch_size = batch_size
             prefilled = False
         else:
@@ -128,9 +128,6 @@ class Generator:
         for i in range(forced_prompt_length + num_tokens):
             post_prefill = prefilled or (cached_generation and i > 0)
 
-            if i%50000 == 0:
-                mem = torch.cuda.memory_allocated(device=x.device) / 1e9
-                print_rank_0(f"Memory at iteration {i}: {mem} GB")
             # prefill then process only the last token
             if post_prefill:
                 x = x[:, -1:]
