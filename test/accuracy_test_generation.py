@@ -67,7 +67,7 @@ def generate_and_score(*, sequences, model, tokenizer, args, generations_per_pro
                 top_p=args.top_p,
                 temperature=args.temperature,
                 device=device,
-                verbose=2,
+                verbose=1,
             )
 
             decoded_seq = ret.sequences[0]
@@ -86,7 +86,7 @@ def calculate_sequence_identity(seq1: str, seq2: str, amino_acids=False) -> Opti
     if not seq1 or not seq2:
         return None
 
-    if amino_acids:
+    if amino_acids: # This a simple conversion only for in-frame prompts + generations
         seq1 = seq1[:len(seq1) - (len(seq1) % 3)]
         seq2 = seq2[:len(seq2) - (len(seq2) % 3)]
         aa1 = str(Seq(seq1).translate())
@@ -125,7 +125,7 @@ def main():
     parser.add_argument("--checkpoint_path", default=None, help="Path to checkpoint file")
     parser.add_argument("--num_tokens", default=500, type=int, help="Number of tokens to generate.")
     parser.add_argument("--temperature", default=1.0, type=float)
-    parser.add_argument("--top_k", default=4, type=int)
+    parser.add_argument("--top_k", default=1, type=int)
     parser.add_argument("--top_p", default=1.0, type=float)
     parser.add_argument("--generations_per_prompt", default=1, type=int)
     parser.add_argument(
