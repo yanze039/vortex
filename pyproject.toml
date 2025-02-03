@@ -1,5 +1,8 @@
 [build-system]
-requires = ["setuptools", "wheel"]
+requires = [
+    "setuptools",
+    "wheel",
+]
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -14,9 +17,15 @@ dependencies = [
     "torch==2.5.1",
     "rich==13.9.2",
     "ruff==0.1.1",
+    "numpy",
     "pre-commit==4.0.1",
+    "einops==0.8.0",
     "packaging",
     "pip",
+    "build",
+    "wheel",
+    "tqdm",
+    "setuptools",
 ]
 
 [tool.black]

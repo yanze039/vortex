@@ -2,7 +2,6 @@ model_name: shc-evo2-7b-8k-2T-v2
 
 vocab_size: 512
 hidden_size: 4096
-# Number of long convolution filters in each hyena block. Can be smaller than `hidden_size`
 num_filters: 4096
 hcl_layer_idxs: [2,6,9,13,16,20,23,27,30]
 hcm_layer_idxs: [1,5,8,12,15,19,22,26,29]
