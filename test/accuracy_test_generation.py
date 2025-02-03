@@ -68,6 +68,7 @@ def generate_and_score(*, sequences, model, tokenizer, args, generations_per_pro
                 temperature=args.temperature,
                 device=device,
                 verbose=1,
+                cached_generation=args.cached_generation,
             )
 
             decoded_seq = ret.sequences[0]
@@ -123,7 +124,7 @@ def main():
     parser = argparse.ArgumentParser(description="Run StripedHyena Model")
     parser.add_argument("--config_path", required=True, help="Path to configuration file")
     parser.add_argument("--checkpoint_path", default=None, help="Path to checkpoint file")
-    parser.add_argument("--num_tokens", default=500, type=int, help="Number of tokens to generate.")
+    parser.add_argument("--num_tokens", default=100, type=int, help="Number of tokens to generate.")
     parser.add_argument("--temperature", default=1.0, type=float)
     parser.add_argument("--top_k", default=1, type=int)
     parser.add_argument("--top_p", default=1.0, type=float)
