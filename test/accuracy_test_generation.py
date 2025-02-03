@@ -6,8 +6,6 @@ import csv
 from typing import Dict, List, Optional, Tuple, Any, NamedTuple, Union
 from pathlib import Path
 import numpy as np
-from Bio import Align
-from Bio.Seq import Seq
 
 import yaml
 
@@ -82,40 +80,23 @@ def generate_and_score(*, sequences, model, tokenizer, args, generations_per_pro
     return reshaped_scores
     
 
-def calculate_sequence_identity(seq1: str, seq2: str, amino_acids=False) -> Optional[float]:
-    """Calculate sequence identity between two sequences."""
+def calculate_sequence_identity(seq1: str, seq2: str) -> Optional[float]:
+    """Calculate sequence identity between two sequences through direct comparison."""
     if not seq1 or not seq2:
         return None
-
-    if amino_acids: # This a simple conversion only for in-frame prompts + generations
-        seq1 = seq1[:len(seq1) - (len(seq1) % 3)]
-        seq2 = seq2[:len(seq2) - (len(seq2) % 3)]
-        aa1 = str(Seq(seq1).translate())
-        aa2 = str(Seq(seq2).translate())
-        seq1 = aa1
-        seq2 == aa2
-
-    aligner = Align.PairwiseAligner()
-    aligner.mode = 'global'
-    aligner.match_score = 2
-    aligner.mismatch_score = -1
-    aligner.open_gap_score = -10
-    aligner.extend_gap_score = -0.5
     
-    alignment = aligner.align(seq1, seq2)[0]
+    # Direct comparison of sequences
+    min_length = min(len(seq1), len(seq2))
+    matches = sum(a == b for a, b in zip(seq1[:min_length], seq2[:min_length]))
 
-    print(alignment)
-
-    matches = sum(a == b for a, b in zip(alignment[0], alignment[1]))
-
-    return (matches / min(len(seq1),len(seq2))) * 100
+    return (matches / min_length) * 100
 
 def main():
     '''
     python ./test/generation/test_generation.py --config_path <config_path> --checkpoint_path <path.pt>
 
-    Expected results: 
-    Evo 2 40b 1m: 93.35%
+    Expected results (direct comparison of sequences, no alignment):
+    Evo 2 40b 1m: 91.15%
     Evo 2 7b 1m: 89.25% 
     '''
     import torch
