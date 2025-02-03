@@ -113,6 +113,10 @@ def calculate_sequence_identity(seq1: str, seq2: str, amino_acids=False) -> Opti
 def main():
     '''
     python ./test/generation/test_generation.py --config_path <config_path> --checkpoint_path <path.pt>
+
+    Expected results: 
+    Evo 2 40b 1m: 93.35%
+    Evo 2 7b 1m: 89.25% 
     '''
     import torch
 
