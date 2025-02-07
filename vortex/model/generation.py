@@ -27,18 +27,45 @@ class Generator:
         num_tokens: int = 32,
         cached_generation: bool = True,
         force_prompt_threshold: int = 1000,
+        max_seqlen: int = None,
         print_generation: bool = True,
         verbose: bool = False,
         skip_special_tokens: bool = False,
         stop_at_eos: bool = True,
-        max_seqlen: int = None,
         inference_params_dict: dict = None,
         token_callback=lambda i: None,
     ) -> tuple[torch.Tensor, torch.Tensor]:
-        '''
-        A version of the vortex generate() method that enables passing in and that returns the
-        `inference_params_dict` for replaying cached sampling from a given state.
-        '''
+        """
+        Generates using the model with optional cached sampling replay.
+        
+        This method enables passing in and returning the `inference_params_dict` for 
+        replaying cached sampling from a given state, for example for beam search.
+        
+        Args:
+            device: The device to run the model on.
+            input_string: The input prompt to generate from.
+            input_ids: The input prompt token ids to generate from.
+            num_tokens: The number of tokens to generate.
+            cached_generation: Whether to use cached generation. Defaults to False.
+            force_prompt_threshold: Number of tokens to prefill in parallel before 
+                switching to prompt forcing. Used to reduce peak memory usage and 
+                support longer prompts. Defaults to None.
+            max_seqlen: Maximum sequence length to generate. Determines the max size 
+                of the cache if larger. Otherwise automatically determined using 
+                prompt length + max_tokens. Defaults to None.
+            print_generation: Whether to print generated tokens. Defaults to False.
+            verbose: Whether to print verbose output. Defaults to False.
+            skip_special_tokens: Whether to skip special tokens. Defaults to True.
+            stop_at_eos: Whether to stop generation at EOS token. Defaults to True.
+            inference_params_dict: Dictionary of inference parameters to use for
+                replaying cached sampling. Defaults to None.
+            token_callback: Optional callback function called after each token is
+                generated. Defaults to None.
+        
+        Returns:
+            dict: The inference parameters dictionary used for generation, which can
+                be used to replay the exact same sampling sequence.
+        """
         if isinstance(self.tokenizer.eos, int):
             eos_token_ids = torch.LongTensor([self.tokenizer.eos]).to(device)
         else:
@@ -69,6 +96,9 @@ class Generator:
         else:
             forced_prompt_length = 0
         tot_length = prompt_length + num_tokens
+        if max_seqlen is not None:
+            if max_seqlen > tot_length:
+                tot_length = max_seqlen
 
         generation = torch.empty(
             x.shape[0],
@@ -126,6 +156,7 @@ class Generator:
             else:
                 print_rank_0(f"Prompt ids: {input_ids} {input_ids.shape}")
 
+        i = 0
         for i in range(forced_prompt_length + num_tokens):
             post_prefill = prefilled or (cached_generation and i > 0)
 
