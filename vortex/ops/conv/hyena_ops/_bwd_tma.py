@@ -103,7 +103,9 @@ def _two_pass_bwd_grouped_tma_kernel(
     tiles_per_filter_group = dg // BLOCK_D
     chunks_per_seq = tl.cdiv(seqlen, CHUNK_SIZE)
 
-    for tile_id in tl.range(pid, total_tiles, num_programs, num_stages=NUM_PIPELINE_STAGES):
+    for tile_id in tl.range(
+        pid, total_tiles, num_programs, num_stages=NUM_PIPELINE_STAGES
+    ):
         pid_batch, pid_chunk, pid_d, pid_filter_group = get_program_order(
             tile_id,
             num_tiles_batch,
@@ -137,9 +139,15 @@ def _two_pass_bwd_grouped_tma_kernel(
             dy_desc, [offset_m, offset_k], [CHUNK_SIZE, BLOCK_D], DTYPE.value
         )
 
-        x = tl._experimental_descriptor_load(x_desc, [offset_m, offset_k], [CHUNK_SIZE, BLOCK_D], DTYPE.value)
-        B = tl._experimental_descriptor_load(B_desc, [offset_m, offset_k], [CHUNK_SIZE, BLOCK_D], DTYPE.value)
-        C = tl._experimental_descriptor_load(C_desc, [offset_m, offset_k], [CHUNK_SIZE, BLOCK_D], DTYPE.value)
+        x = tl._experimental_descriptor_load(
+            x_desc, [offset_m, offset_k], [CHUNK_SIZE, BLOCK_D], DTYPE.value
+        )
+        B = tl._experimental_descriptor_load(
+            B_desc, [offset_m, offset_k], [CHUNK_SIZE, BLOCK_D], DTYPE.value
+        )
+        C = tl._experimental_descriptor_load(
+            C_desc, [offset_m, offset_k], [CHUNK_SIZE, BLOCK_D], DTYPE.value
+        )
         y2 = tl._experimental_descriptor_load(
             y2_desc, [offset_m, offset_k], [CHUNK_SIZE, BLOCK_D], DTYPE.value
         )
@@ -375,7 +383,9 @@ def two_pass_bwd_grouped_tma(
         T_M = g * CHUNK_SIZE
         T_K = CHUNK_SIZE
         # logger.debug("Creating 2D TMA descriptors for T, T_hat")
-        desc_T = create_2d_tma_descriptor(T.data_ptr(), T_M, T_K, CHUNK_SIZE, CHUNK_SIZE, T.element_size())
+        desc_T = create_2d_tma_descriptor(
+            T.data_ptr(), T_M, T_K, CHUNK_SIZE, CHUNK_SIZE, T.element_size()
+        )
         desc_T_hat = create_2d_tma_descriptor(
             T_hat.data_ptr(), T_M, T_K, CHUNK_SIZE, CHUNK_SIZE, T_hat.element_size()
         )
@@ -432,11 +442,21 @@ def two_pass_bwd_grouped_tma(
     # Load
     # logger.debug("Creating 2D TMA descriptors for dy, x, B, C, y2")
 
-    desc_dy = create_2d_tma_descriptor(dy.data_ptr(), M, K, CHUNK_SIZE, BLOCK_D, dy.element_size())
-    desc_x = create_2d_tma_descriptor(x.data_ptr(), M, K, CHUNK_SIZE, BLOCK_D, x.element_size())
-    desc_B = create_2d_tma_descriptor(B.data_ptr(), M, K, CHUNK_SIZE, BLOCK_D, B.element_size())
-    desc_C = create_2d_tma_descriptor(C.data_ptr(), M, K, CHUNK_SIZE, BLOCK_D, C.element_size())
-    desc_y2 = create_2d_tma_descriptor(y2.data_ptr(), M, K, CHUNK_SIZE, BLOCK_D, y2.element_size())
+    desc_dy = create_2d_tma_descriptor(
+        dy.data_ptr(), M, K, CHUNK_SIZE, BLOCK_D, dy.element_size()
+    )
+    desc_x = create_2d_tma_descriptor(
+        x.data_ptr(), M, K, CHUNK_SIZE, BLOCK_D, x.element_size()
+    )
+    desc_B = create_2d_tma_descriptor(
+        B.data_ptr(), M, K, CHUNK_SIZE, BLOCK_D, B.element_size()
+    )
+    desc_C = create_2d_tma_descriptor(
+        C.data_ptr(), M, K, CHUNK_SIZE, BLOCK_D, C.element_size()
+    )
+    desc_y2 = create_2d_tma_descriptor(
+        y2.data_ptr(), M, K, CHUNK_SIZE, BLOCK_D, y2.element_size()
+    )
     # 1D TMA requirement: elementSize * numel() >= 128
     # desc_h = create_1d_tma_descriptor(h.data_ptr(), g * hl, hl, h.element_size())
 
@@ -444,9 +464,15 @@ def two_pass_bwd_grouped_tma(
     dx = torch.zeros_like(x)
     dB = torch.zeros_like(B)
     dC = torch.zeros_like(C)
-    desc_dx = create_2d_tma_descriptor(dx.data_ptr(), M, K, CHUNK_SIZE, BLOCK_D, dx.element_size())
-    desc_dB = create_2d_tma_descriptor(dB.data_ptr(), M, K, CHUNK_SIZE, BLOCK_D, dB.element_size())
-    desc_dC = create_2d_tma_descriptor(dC.data_ptr(), M, K, CHUNK_SIZE, BLOCK_D, dC.element_size())
+    desc_dx = create_2d_tma_descriptor(
+        dx.data_ptr(), M, K, CHUNK_SIZE, BLOCK_D, dx.element_size()
+    )
+    desc_dB = create_2d_tma_descriptor(
+        dB.data_ptr(), M, K, CHUNK_SIZE, BLOCK_D, dB.element_size()
+    )
+    desc_dC = create_2d_tma_descriptor(
+        dC.data_ptr(), M, K, CHUNK_SIZE, BLOCK_D, dC.element_size()
+    )
 
     num_chunks = triton.cdiv(seqlen, CHUNK_SIZE)
     num_blocks = triton.cdiv(d, BLOCK_D)
@@ -528,7 +554,9 @@ def two_pass_bwd_grouped_tma(
         )
 
     else:
-        dh_buffers = torch.zeros(bs, num_chunks, num_blocks, filter_len, device=x.device, dtype=h.dtype)
+        dh_buffers = torch.zeros(
+            bs, num_chunks, num_blocks, filter_len, device=x.device, dtype=h.dtype
+        )
         dh_batch_stride, dh_chunk_stride, dh_block_stride, _ = dh_buffers.stride()
 
         kernel_args = (
@@ -594,7 +622,9 @@ def two_pass_bwd_grouped_tma(
         # )
 
         # Run the kernel
-        compiled_kernel: triton.compiler.CompiledKernel = kernel[grid](*kernel_args, **kernel_constexprs)
+        compiled_kernel: triton.compiler.CompiledKernel = kernel[grid](
+            *kernel_args, **kernel_constexprs
+        )
 
         dx = dx.reshape(bs, seqlen, g, dg)
         dB = dB.reshape(bs, seqlen, g, dg)
@@ -605,14 +635,18 @@ def two_pass_bwd_grouped_tma(
         # Run second final reduction kernel for dh
         # TODO: either `torch.compile`` or write custom triton kernel for this
         if version == "v1":
-            dhdT = dhdT.reshape(bs, num_chunks, g, num_blocks_per_filter_group, filter_len, CHUNK_SIZE)
+            dhdT = dhdT.reshape(
+                bs, num_chunks, g, num_blocks_per_filter_group, filter_len, CHUNK_SIZE
+            )
             dhdT_hat = dhdT_hat.reshape_as(dhdT)
             dhdT = dhdT.sum([0, 1, 3, 5]).reshape(*filter_shape)
             dhdTc = dhdT_hat.sum([0, 1, 3, 5]).reshape_as(dhdT)
             dh = dhdT + dhdTc
 
         elif version == "v2":
-            dh_buffers = dh_buffers.reshape(bs, num_chunks, g, num_blocks_per_filter_group, filter_len)
+            dh_buffers = dh_buffers.reshape(
+                bs, num_chunks, g, num_blocks_per_filter_group, filter_len
+            )
             dh = dh_buffers.sum([0, 1, 3]).reshape(*filter_shape)
 
         if return_kernel:

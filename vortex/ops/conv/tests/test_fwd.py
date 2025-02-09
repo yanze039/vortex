@@ -5,12 +5,19 @@ import sys
 import pytest
 import torch
 
-from savanna.kernels.triton_src.cgcg.ref_fwd import gcg_fwd_ref_corrected, gcg_two_pass_chunked_fwd_corrected
+from savanna.kernels.triton_src.cgcg.ref_fwd import (
+    gcg_fwd_ref_corrected,
+    gcg_two_pass_chunked_fwd_corrected,
+)
 from ._fwd_tma import two_pass_fwd_grouped_tma
 from .fwd import two_pass_fwd_grouped
 from savanna.kernels.triton_src.cgcg.utils import correction_toeplitz, toeplitz
 
-from savanna.kernels.triton_src.cgcg.tests.utils import FwdTestResult, set_chunk_size, setup_inputs
+from savanna.kernels.triton_src.cgcg.tests.utils import (
+    FwdTestResult,
+    set_chunk_size,
+    setup_inputs,
+)
 
 torch.manual_seed(0)
 torch.set_float32_matmul_precision("highest")

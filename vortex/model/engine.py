@@ -110,21 +110,6 @@ def list_tensors(idx):
             pass
 
 
-class Hyena2Short(nn.Module):
-    def __init__(self):
-        raise NotImplementedError
-
-
-class Hyena2Medium(nn.Module):
-    def __init__(self):
-        raise NotImplementedError
-
-
-class Hyena2Long(nn.Module):
-    def __init__(self):
-        raise NotImplementedError
-
-
 class HyenaInferenceEngine:
     def __init__(
         self,
@@ -475,6 +460,7 @@ class HyenaInferenceEngine:
         return y.to(input_dtype), fir_state
 
     def step_iir(self, x2, x1, v, D, residues, poles, iir_state, iir_groups=1):
+        # TODO: kernelize
         x1v = x1 * v
         poles = torch.exp(poles)  # poles arg contains log_poles
         poles = poles[..., 0][None]  # squeeze dummy seqlen dim and add dummy batch dim

@@ -42,7 +42,9 @@ class DeviceProps:
         return cls._instances[device]
 
     def __post_init__(self):
-        properties = triton.runtime.driver.active.utils.get_device_properties(self.device)
+        properties = triton.runtime.driver.active.utils.get_device_properties(
+            self.device
+        )
         self.NUM_SM = properties["multiprocessor_count"]
         self.NUM_REGS = properties["max_num_regs"]
         self.SIZE_SMEM = properties["max_shared_mem"]
@@ -82,7 +84,9 @@ class KernelOccupancy:
     num_programs: int
 
 
-def get_kernel_occupancy(kernel: triton.compiler.CompiledKernel, num_warps: int, device_props: DeviceProps):
+def get_kernel_occupancy(
+    kernel: triton.compiler.CompiledKernel, num_warps: int, device_props: DeviceProps
+):
     """
     Calculates the occupancy of the given kernel and returns the number of
     programs needed for full occupancy for a persistent kernel.
@@ -133,7 +137,9 @@ def is_power_of_2(n):
 
 
 @triton.jit
-def get_program_ids(pid, tiles_per_seq, d_tiles_per_chunk, chunks_per_seq, SWIZZLE: tl.constexpr = "row"):
+def get_program_ids(
+    pid, tiles_per_seq, d_tiles_per_chunk, chunks_per_seq, SWIZZLE: tl.constexpr = "row"
+):
     """
     Converts 1-D program id to 3-D grid along batch, chunk (sequence) and d (feature) dimensions.
 
@@ -191,7 +197,9 @@ def create_2d_tma_descriptor(ptr, dim1, dim0, block_dim1, block_dim0, element_si
 def create_1d_tma_descriptor(ptr, dim, block_dim, element_size):
     TMA_SIZE = 128
     desc = np.empty(TMA_SIZE, dtype=np.int8)
-    triton.runtime.driver.active.utils.fill_1d_tma_descriptor(ptr, dim, block_dim, element_size, desc)
+    triton.runtime.driver.active.utils.fill_1d_tma_descriptor(
+        ptr, dim, block_dim, element_size, desc
+    )
 
     gpu_desc = torch.tensor(desc, device="cuda")
 
@@ -257,11 +265,23 @@ _KERNEL_CONSTEXPRS = {
 }
 _V1_FWD_TUNING_KEYS = _KERNEL_CONSTEXPRS - {"CHUNK_TILES_PER_PROGRAM", "USE_TMA"}
 # Backwards requires knowing "CHUNK_SIZE" beforehand
-_V1_BWD_TUNING_KEYS = _KERNEL_CONSTEXPRS - {"CHUNK_SIZE", "CHUNK_TILES_PER_PROGRAM", "USE_TMA"}
+_V1_BWD_TUNING_KEYS = _KERNEL_CONSTEXPRS - {
+    "CHUNK_SIZE",
+    "CHUNK_TILES_PER_PROGRAM",
+    "USE_TMA",
+}
 _V2_FWD_TUNING_KEYS = _KERNEL_CONSTEXPRS - {"NUM_PIPELINE_STAGES", "USE_TMA"}
-_V2_BWD_TUNING_KEYS = _KERNEL_CONSTEXPRS - {"CHUNK_SIZE", "NUM_PIPELINE_STAGES", "USE_TMA"}
+_V2_BWD_TUNING_KEYS = _KERNEL_CONSTEXPRS - {
+    "CHUNK_SIZE",
+    "NUM_PIPELINE_STAGES",
+    "USE_TMA",
+}
 
-FWD_KERNEL_CONSTEXPRS = _KERNEL_CONSTEXPRS | {"RETURN_TOEPLITZ", "RETURN_Y2", "RETURN_BX_LAG"}
+FWD_KERNEL_CONSTEXPRS = _KERNEL_CONSTEXPRS | {
+    "RETURN_TOEPLITZ",
+    "RETURN_Y2",
+    "RETURN_BX_LAG",
+}
 BWD_KERNEL_CONSTEXPRS = _KERNEL_CONSTEXPRS | {"LOAD_TOEPLITZ", "LOAD_BX_LAG"}
 KERNEL_LAUNCH_KWARGS = {"num_warps", "num_stages", "num_ctas"}
 
@@ -295,19 +315,24 @@ class KernelConfig:
             0 <= self.NUM_PIPELINE_STAGES < 2
         ), "NUM_PIPELINE_STAGES > 1 causes segfault currently, see https://github.com/triton-lang/triton/issues/4368"
         if self.schedule == "default":
-            warnings.warn("WARNING: Setting NUM_PIPELINE_STAGES to 0 since schedule is default")
+            warnings.warn(
+                "WARNING: Setting NUM_PIPELINE_STAGES to 0 since schedule is default"
+            )
             self.NUM_PIPELINE_STAGES = 0
 
     def __str__(self):
         fields = ", ".join(
-            f"{field.name}={getattr(self, field.name)}" for field in self.__dataclass_fields__.values()
+            f"{field.name}={getattr(self, field.name)}"
+            for field in self.__dataclass_fields__.values()
         )
         return f"{self.__class__.__name__}: {fields}"
 
     def __eq__(self, other):
         if not isinstance(other, KernelConfig):
             return NotImplemented
-        return all(getattr(self, f.name) == getattr(other, f.name) for f in fields(self))
+        return all(
+            getattr(self, f.name) == getattr(other, f.name) for f in fields(self)
+        )
 
     def __hash__(self):
         return hash(tuple(getattr(self, f.name) for f in fields(self)))
@@ -336,7 +361,9 @@ class BwdKernelConfig(KernelConfig):
 if __name__ == "__main__":
     device_props_1 = DeviceProps(device=0)  # Singleton for device 0
     # device_props_2 = DeviceProps(device=1)  # Singleton for device 1
-    device_props_3 = DeviceProps(device=0)  # Should return the same instance as device_props_1
+    device_props_3 = DeviceProps(
+        device=0
+    )  # Should return the same instance as device_props_1
 
     # Both instances should be the same for device 0
     print(device_props_1 is device_props_3)  # Output: True

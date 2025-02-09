@@ -16,7 +16,10 @@ try:
         local_flash_attn_with_kvcache,
     )
 except ImportError:
-    local_flash_attn_varlen_qkvpacked_func, local_flash_attn_varlen_kvpacked_func = None, None
+    local_flash_attn_varlen_qkvpacked_func, local_flash_attn_varlen_kvpacked_func = (
+        None,
+        None,
+    )
     local_flash_attn_qkvpacked_func, local_flash_attn_kvpacked_func = None, None
     local_flash_attn_with_kvcache = None
 
@@ -69,7 +72,9 @@ class FlashSelfAttention(nn.Module):
         assert (
             local_flash_attn_varlen_qkvpacked_func is not None
         ), "FlashAttention is not installed"
-        assert local_flash_attn_qkvpacked_func is not None, "FlashAttention is not installed"
+        assert (
+            local_flash_attn_qkvpacked_func is not None
+        ), "FlashAttention is not installed"
         self.layer_number = layer_number
         self.causal = causal
         self.softmax_scale = softmax_scale
@@ -155,7 +160,9 @@ class FlashCrossAttention(nn.Module):
         assert (
             local_flash_attn_varlen_kvpacked_func is not None
         ), "FlashAttention is not installed"
-        assert local_flash_attn_kvpacked_func is not None, "FlashAttention is not installed"
+        assert (
+            local_flash_attn_kvpacked_func is not None
+        ), "FlashAttention is not installed"
         self.causal = causal
         self.softmax_scale = softmax_scale
         self.drop = nn.Dropout(attention_dropout)
@@ -256,29 +263,35 @@ class SelfAttention(nn.Module):
             key_padding_mask: boolean mask to apply to the attention weights. True means to keep,
                 False means to mask out. (B, S)
         """
-        batch_size, seqlen = qkv.shape[0], qkv.shape[1]
-        causal = self.causal if causal is None else causal
-        q, k, v = qkv.unbind(dim=2)
-        softmax_scale = self.softmax_scale or 1.0 / math.sqrt(q.shape[-1])
-        scores = torch.einsum("bthd,bshd->bhts", q, k * softmax_scale)
+        q, k, v = qkv.unbind(dim=2)  # each: (B, T, H, D)
+        q = q.permute(0, 2, 1, 3)  # (B, H, T, D)
+        k = k.permute(0, 2, 1, 3)
+        v = v.permute(0, 2, 1, 3)
+        batch_size, num_heads, seqlen, d = q.shape
+
+        scale = (
+            self.softmax_scale if self.softmax_scale is not None else 1.0 / math.sqrt(d)
+        )
+        q = q * (scale * math.sqrt(d))
+
+        attn_mask = None
         if key_padding_mask is not None:
-            padding_mask = torch.full(
-                (batch_size, seqlen), -10000.0, dtype=scores.dtype, device=scores.device
+            attn_mask = torch.where(
+                repeat(key_padding_mask, "b s -> b t s", t=seqlen),
+                0.0,
+                -10000.0,
             )
-            padding_mask.masked_fill_(key_padding_mask, 0.0)
-            # TD [2022-09-30]: Adding is faster than masked_fill_ (idk why, just better kernel I guess)
-            scores = scores + rearrange(padding_mask, "b s -> b 1 1 s")
-        if causal:
-            # "triu_tril_cuda_template" not implemented for 'BFloat16'
-            # So we have to construct the mask in float
-            causal_mask = torch.triu(
-                torch.full((seqlen, seqlen), -10000.0, device=scores.device), 1
-            )
-            # TD [2022-09-30]: Adding is faster than masked_fill_ (idk why, just better kernel I guess)
-            scores = scores + causal_mask.to(dtype=scores.dtype)
-        attention = torch.softmax(scores, dim=-1, dtype=v.dtype)
-        attention_drop = self.drop(attention)
-        output = torch.einsum("bhts,bshd->bthd", attention_drop, v)
+
+        output = torch.nn.functional.scaled_dot_product_attention(
+            q,
+            k,
+            v,
+            attn_mask=attn_mask,
+            dropout_p=self.drop.p if self.training else 0.0,
+            is_causal=(self.causal if causal is None else causal),
+        )
+
+        output = output.permute(0, 2, 1, 3)
         return output
 
 

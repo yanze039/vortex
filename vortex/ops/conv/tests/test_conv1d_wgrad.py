@@ -1,4 +1,3 @@
-
 import itertools
 
 import pytest
@@ -20,10 +19,14 @@ GROUP_SIZES = [1, 2, 4]
 FILTER_SIZES = [4, 32, 128]
 DTYPES = [torch.float32, torch.float16]
 
-TEST_CONFIGS = list(itertools.product(BATCH_SIZES, SEQLEN, D_SIZES, GROUP_SIZES, FILTER_SIZES, DTYPES))
+TEST_CONFIGS = list(
+    itertools.product(BATCH_SIZES, SEQLEN, D_SIZES, GROUP_SIZES, FILTER_SIZES, DTYPES)
+)
 
 
-@pytest.mark.parametrize("bs, seqlen, d, g, hl, dtype", TEST_CONFIGS, ids=lambda x: str(x))
+@pytest.mark.parametrize(
+    "bs, seqlen, d, g, hl, dtype", TEST_CONFIGS, ids=lambda x: str(x)
+)
 def test_conv1d_wgrad(bs, seqlen, hl, d, g, dtype):
     dg = d // g
     ATOL = 1e-4

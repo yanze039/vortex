@@ -10,12 +10,18 @@ from .fwd_kernels import load_toeplitz
 
 def setup_inputs(bs, seqlen, dg, g, filter_size, dtype, requires_grad=True):
     device = "cuda"
-    x = torch.randn(bs, seqlen, g, dg, device=device, dtype=dtype, requires_grad=requires_grad)
-    B = torch.randn(bs, seqlen, g, dg, device=device, dtype=dtype, requires_grad=requires_grad)
-    C = torch.randn(bs, seqlen, g, dg, device=device, dtype=dtype, requires_grad=requires_grad)
-    h = torch.randn(g * filter_size, device=device, dtype=dtype, requires_grad=requires_grad).reshape(
-        g, 1, filter_size
+    x = torch.randn(
+        bs, seqlen, g, dg, device=device, dtype=dtype, requires_grad=requires_grad
     )
+    B = torch.randn(
+        bs, seqlen, g, dg, device=device, dtype=dtype, requires_grad=requires_grad
+    )
+    C = torch.randn(
+        bs, seqlen, g, dg, device=device, dtype=dtype, requires_grad=requires_grad
+    )
+    h = torch.randn(
+        g * filter_size, device=device, dtype=dtype, requires_grad=requires_grad
+    ).reshape(g, 1, filter_size)
     return x, B, C, h
 
 
@@ -40,7 +46,9 @@ def get_test_diffs(expected, actual, rtol=1e-3, atol=1e-3, verbose=False):
     if verbose:
         print(f"max_diff = {max_diff}")
 
-        print(f"Expected at max diff = {actual_at_max_diff}, Actual = {expected_at_max_diff}")
+        print(
+            f"Expected at max diff = {actual_at_max_diff}, Actual = {expected_at_max_diff}"
+        )
 
         print(f"rel_diff = {rel_diff} = {atol} + {rtol_diff}")
 
@@ -71,7 +79,9 @@ def toeplitz_load_kernel(
     CHUNK_SIZE: tl.constexpr,
     SINGLE_GROUP: tl.constexpr,
 ):
-    T = load_toeplitz(h_ptr, FILTER_LEN, CHUNK_SIZE, SINGLE_GROUP=SINGLE_GROUP, group_num=group_num)
+    T = load_toeplitz(
+        h_ptr, FILTER_LEN, CHUNK_SIZE, SINGLE_GROUP=SINGLE_GROUP, group_num=group_num
+    )
     store_idx = tl.arange(0, CHUNK_SIZE)
     row_idx = store_idx[:, None] * CHUNK_SIZE
     col_idx = store_idx[None, :]
@@ -100,11 +110,17 @@ class TestResult:
         return ",".join(f.name for f in fields(cls))
 
     def _exclude_from_str(self):
-        tensor_fields = [f.name for f in fields(self) if isinstance(getattr(self, f.name), torch.Tensor)]
+        tensor_fields = [
+            f.name
+            for f in fields(self)
+            if isinstance(getattr(self, f.name), torch.Tensor)
+        ]
         return tensor_fields
 
     def __str__(self):
-        props = {k: v for k, v in self.__dict__.items() if k not in self._exclude_from_str()}
+        props = {
+            k: v for k, v in self.__dict__.items() if k not in self._exclude_from_str()
+        }
         # Add for easy filtering from rest of pytest output
         props.update({self._SENTINEL: self.name})
         return json.dumps(props)
@@ -123,7 +139,11 @@ class TestResult:
 
 
 def get_diff(expected: torch.Tensor, actual: torch.Tensor, reduction="max"):
-    diff = (expected - actual).abs().max() if reduction == "max" else (expected - actual).abs().mean()
+    diff = (
+        (expected - actual).abs().max()
+        if reduction == "max"
+        else (expected - actual).abs().mean()
+    )
     return diff.cpu().item()
 
 
@@ -160,12 +180,21 @@ class FwdTestResult(TestResult):
     y2_passed: bool = field(init=False)
 
     def _exclude_from_str(self):
-        return super()._exclude_from_str() + ["y2", "T", "T_hat", "y2_ref", "T_ref", "T_hat_ref"]
+        return super()._exclude_from_str() + [
+            "y2",
+            "T",
+            "T_hat",
+            "y2_ref",
+            "T_ref",
+            "T_hat_ref",
+        ]
 
     def diffs(self):
         y_diff = get_diff(self.y_ref, self.y)
         T_diff = get_diff(self.T_ref, self.T) if self.T_ref is not None else None
-        T_hat_diff = get_diff(self.T_hat_ref, self.T_hat) if self.T_hat_ref is not None else None
+        T_hat_diff = (
+            get_diff(self.T_hat_ref, self.T_hat) if self.T_hat_ref is not None else None
+        )
         y2_diff = get_diff(self.y2_ref, self.y2) if self.y2_ref is not None else None
         return y_diff, T_diff, T_hat_diff, y2_diff
 
@@ -230,7 +259,9 @@ class BwdTestResult(TestResult):
         dx_passed = torch.allclose(self.dx_ref, self.dx, atol=self.ATOL, rtol=self.RTOL)
         dB_passed = torch.allclose(self.dB_ref, self.dB, atol=self.ATOL, rtol=self.RTOL)
         dC_passed = torch.allclose(self.dC_ref, self.dC, atol=self.ATOL, rtol=self.RTOL)
-        dh_passed = torch.allclose(self.dh_ref, self.dh, atol=self.ATOL_dh, rtol=self.RTOL_dh)
+        dh_passed = torch.allclose(
+            self.dh_ref, self.dh, atol=self.ATOL_dh, rtol=self.RTOL_dh
+        )
         return dx_passed, dB_passed, dC_passed, dh_passed
 
     def __post_init__(self):

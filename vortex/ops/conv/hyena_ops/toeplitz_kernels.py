@@ -15,7 +15,10 @@ def toeplitz_idx(
     if TOEPLITZ_TYPE == "toeplitz":
         r_idx = tl.arange((FILTER_LEN - 1), CHUNK_SIZE + (FILTER_LEN - 1))[None, :]
     elif TOEPLITZ_TYPE == "correction_toeplitz":
-        r_idx = tl.arange((FILTER_LEN - 1), CHUNK_SIZE + (FILTER_LEN - 1))[None, :] - CHUNK_SIZE
+        r_idx = (
+            tl.arange((FILTER_LEN - 1), CHUNK_SIZE + (FILTER_LEN - 1))[None, :]
+            - CHUNK_SIZE
+        )
     else:
         tl.static_assert(False, "Invalid ToeplitzType")
     c_idx = tl.arange(0, CHUNK_SIZE)[:, None]

@@ -51,15 +51,21 @@ class Kernel:
     def template(self) -> str:
         if self.direction == "fwd":
             return KERNEL_IMPL_TEMPLATE_FWD.format(
-                DTYPE=DTYPE_MAP[self.dtype], HEAD_DIM=self.head_dim, IS_CAUSAL=self.is_causal
+                DTYPE=DTYPE_MAP[self.dtype],
+                HEAD_DIM=self.head_dim,
+                IS_CAUSAL=self.is_causal,
             )
         elif self.direction == "bwd":
             return KERNEL_IMPL_TEMPLATE_BWD.format(
-                DTYPE=DTYPE_MAP[self.dtype], HEAD_DIM=self.head_dim, IS_CAUSAL=self.is_causal
+                DTYPE=DTYPE_MAP[self.dtype],
+                HEAD_DIM=self.head_dim,
+                IS_CAUSAL=self.is_causal,
             )
         else:
             return KERNEL_IMPL_TEMPLATE_FWD_SPLIT.format(
-                DTYPE=DTYPE_MAP[self.dtype], HEAD_DIM=self.head_dim, IS_CAUSAL=self.is_causal
+                DTYPE=DTYPE_MAP[self.dtype],
+                HEAD_DIM=self.head_dim,
+                IS_CAUSAL=self.is_causal,
             )
 
     @property
@@ -69,8 +75,16 @@ class Kernel:
 
 def get_all_kernels() -> List[Kernel]:
     for direction in ["fwd", "fwd_split", "bwd"]:
-        for dtype, head_dim, is_causal, sm in itertools.product(DTYPE_MAP.keys(), HEAD_DIMENSIONS, IS_CAUSAL, SM):
-            yield Kernel(sm=sm, dtype=dtype, head_dim=head_dim, is_causal=is_causal, direction=direction)
+        for dtype, head_dim, is_causal, sm in itertools.product(
+            DTYPE_MAP.keys(), HEAD_DIMENSIONS, IS_CAUSAL, SM
+        ):
+            yield Kernel(
+                sm=sm,
+                dtype=dtype,
+                head_dim=head_dim,
+                is_causal=is_causal,
+                direction=direction,
+            )
 
 
 def write_kernel(kernel: Kernel, autogen_dir: Path) -> None:
@@ -101,8 +115,7 @@ if __name__ == "__main__":
         "-o",
         "--output_dir",
         required=False,
-        help="Where to generate the kernels "
-        " will default to the current directory ",
+        help="Where to generate the kernels " " will default to the current directory ",
     )
     args = parser.parse_args()
     main(args.output_dir)

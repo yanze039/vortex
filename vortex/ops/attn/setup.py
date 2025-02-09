@@ -31,12 +31,13 @@ parent_dir = os.path.dirname(os.path.dirname(this_dir))
 BUILD_TARGET = os.environ.get("BUILD_TARGET", "auto")
 FORCE_BUILD = True
 
+
 def get_platform():
     """
     Returns the platform name as used in wheel filenames.
     """
     if sys.platform.startswith("linux"):
-        return f'linux_{platform.uname().machine}'
+        return f"linux_{platform.uname().machine}"
     elif sys.platform == "darwin":
         mac_version = ".".join(platform.mac_ver()[0].split(".")[:2])
         return f"macosx_{mac_version}_x86_64"
@@ -47,7 +48,9 @@ def get_platform():
 
 
 def get_cuda_bare_metal_version(cuda_dir):
-    raw_output = subprocess.check_output([cuda_dir + "/bin/nvcc", "-V"], universal_newlines=True)
+    raw_output = subprocess.check_output(
+        [cuda_dir + "/bin/nvcc", "-V"], universal_newlines=True
+    )
     output = raw_output.split()
     release_idx = output.index("release") + 1
     bare_metal_version = parse(output[release_idx].split(",")[0])
@@ -56,7 +59,7 @@ def get_cuda_bare_metal_version(cuda_dir):
 
 
 def get_hip_version():
-    return parse(torch.version.hip.split()[-1].rstrip('-').replace('-', '+'))
+    return parse(torch.version.hip.split()[-1].rstrip("-").replace("-", "+"))
 
 
 def check_if_cuda_home_none(global_option: str) -> None:
@@ -76,9 +79,7 @@ def check_if_rocm_home_none(global_option: str) -> None:
         return
     # warn instead of error because user could be downloading prebuilt wheels, so hipcc won't be necessary
     # in that case.
-    warnings.warn(
-        f"{global_option} was requested, but hipcc was not found."
-    )
+    warnings.warn(f"{global_option} was requested, but hipcc was not found.")
 
 
 def append_nvcc_threads(nvcc_extra_args):
@@ -139,7 +140,7 @@ ext_modules.append(
             "csrc/flash_attn/src/flash_fwd_hdim128_bf16_causal_sm80.cu",
             "csrc/flash_attn/src/flash_bwd_hdim128_bf16_causal_sm80.cu",
             "csrc/flash_attn/src/flash_fwd_split_hdim128_bf16_causal_sm80.cu",
-            "csrc/flash_attn/src/flash_fwd_split_hdim128_bf16_sm80.cu"
+            "csrc/flash_attn/src/flash_fwd_split_hdim128_bf16_sm80.cu",
         ],
         extra_compile_args={
             "cxx": ["-O3", "-std=c++17"],
@@ -198,15 +199,18 @@ class NinjaBuildExtension(BuildExtension):
             max_num_jobs_cores = max(1, os.cpu_count() // 2)
 
             # calculate the maximum allowed NUM_JOBS based on free memory
-            free_memory_gb = psutil.virtual_memory().available / (1024 ** 3)  # free memory in GB
-            max_num_jobs_memory = int(free_memory_gb / 9)  # each JOB peak memory cost is ~8-9GB when threads = 4
+            free_memory_gb = psutil.virtual_memory().available / (
+                1024**3
+            )  # free memory in GB
+            max_num_jobs_memory = int(
+                free_memory_gb / 9
+            )  # each JOB peak memory cost is ~8-9GB when threads = 4
 
             # pick lower value of jobs based on cores vs memory metric to minimize oom and swap usage during compilation
             max_jobs = max(1, min(max_num_jobs_cores, max_num_jobs_memory))
             os.environ["MAX_JOBS"] = str(max_jobs)
 
         super().__init__(*args, **kwargs)
-
 
 
 setup(
@@ -225,10 +229,12 @@ setup(
     ),
     ext_modules=ext_modules,
     cmdclass={
-        'bdist_wheel': CachedWheelsCommand, 
-        'build_ext': NinjaBuildExtension,
-    } if ext_modules else {
-        'bdist_wheel': CachedWheelsCommand,
+        "bdist_wheel": CachedWheelsCommand,
+        "build_ext": NinjaBuildExtension,
+    }
+    if ext_modules
+    else {
+        "bdist_wheel": CachedWheelsCommand,
     },
     python_requires=">=3.11",
     install_requires=[

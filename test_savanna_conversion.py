@@ -69,10 +69,3 @@ if __name__ == "__main__":
     logits_vortex = m.forward(inputs)
 
     breakpoint()
-    # logits_garyk = torch.load('/home/gbrixi/dnagen/eval/bin/evo2_7b_ACTG.pt', map_location=device)
-
-    # print(logits_vortex)
-
-    # print(logits_savanna)
-
-    # print(logits_garyk)

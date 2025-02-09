@@ -1,9 +1,5 @@
 # Copyright (c) 2024, Michael Poli.
 
-# Copyright (c) Together
-# This software is distributed under the terms of the Apache License, Version 2.0
-# Author: Michael Poli
-
 import argparse
 
 import torch

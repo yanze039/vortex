@@ -16,7 +16,11 @@ class ToeplitzTestConfig:
     DEFAULT_FILTER_LENS = [4, 128]
 
     @staticmethod
-    def configs(chunk_sizes: list[int] = None, group_sizes: list[int] = None, filter_lens: list[int] = None):
+    def configs(
+        chunk_sizes: list[int] = None,
+        group_sizes: list[int] = None,
+        filter_lens: list[int] = None,
+    ):
         if chunk_sizes is None:
             chunk_sizes = ToeplitzTestConfig.DEFAULT_CHUNK_SIZES
         if group_sizes is None:
@@ -47,7 +51,12 @@ def test_toeplitz_load(g, hl, chunk_size):
         ref = T_ref[i]
         T = torch.empty_like(ref)
         toeplitz_load_kernel[(1,)](
-            h.reshape(-1), i, T, FILTER_LEN=hl, CHUNK_SIZE=chunk_size, SINGLE_GROUP=is_single_group
+            h.reshape(-1),
+            i,
+            T,
+            FILTER_LEN=hl,
+            CHUNK_SIZE=chunk_size,
+            SINGLE_GROUP=is_single_group,
         )
         passed = torch.allclose(T, ref)
         if not passed:

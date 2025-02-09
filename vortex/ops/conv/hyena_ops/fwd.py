@@ -6,6 +6,8 @@ import triton
 from .fwd_kernels import (
     _two_pass_fwd_grouped_kernel_v1,
     _two_pass_fwd_grouped_kernel_v2,
+    _two_pass_fwd_refactor_kernel,
+    _two_pass_fwd_refactor_autotuned,
 )
 from .kernel_utils import (
     AutotunedResult,
@@ -23,8 +25,8 @@ def two_pass_fwd_grouped(
     return_bx_lag: bool = False,  # Bx_lag = B_lag * x_lag
     verbose: bool = False,
     schedule: str = "default",
-    autotune: bool = False,
-    version: str = "v1",
+    autotune: bool = True,
+    version: str = "refactor",
     CHUNK_SIZE: int = None,
     BLOCK_D: int = None,
     CHUNK_TILES_PER_PROGRAM: int = 1,
@@ -110,37 +112,41 @@ def two_pass_fwd_grouped(
         autotune and warmup
     ), "autotune and warmup are not supported, use return_kernel=True to get the kernel after autotuning"
 
-    if autotune:
-        raise NotImplementedError("autotuning not implemented yet")
-        # if schedule == "default":
-        #     kernel: triton.runtime.JITFunction = _two_pass_fwd_grouped_default_autotuned
-        # elif schedule == "persistent":
-        #     kernel: triton.runtime.JITFunction = (
-        #         _two_pass_fwd_grouped_persistent_autotuned
-        # )
-    else:
-        assert all(
-            [
-                CHUNK_SIZE,
-                BLOCK_D,
-            ]
-        ), "Must specify all of CHUNK_SIZE, BLOCK_D, NUM_PIPELINE_STAGES"
+    # if autotune:
+    # raise NotImplementedError("autotuning not implemented yet")
+    # if schedule == "default":
+    #     kernel: triton.runtime.JITFunction = _two_pass_fwd_grouped_default_autotuned
+    # elif schedule == "persistent":
+    #     kernel: triton.runtime.JITFunction = (
+    #         _two_pass_fwd_grouped_persistent_autotuned
+    # )
+    # else:
+    assert all(
+        [
+            CHUNK_SIZE,
+            BLOCK_D,
+        ]
+    ), "Must specify all of CHUNK_SIZE, BLOCK_D, NUM_PIPELINE_STAGES"
 
-        if version == "v1":
-            assert NUM_PIPELINE_STAGES is not None, "Must specify NUM_PIPELINE_STAGES for version v1"
-            kernel: triton.runtime.JITFunction = _two_pass_fwd_grouped_kernel_v1
-        elif version == "v2":
-            assert CHUNK_TILES_PER_PROGRAM is not None
-            assert schedule == "default", "schedule must be default for version v2"
-            kernel: triton.runtime.JITFunction = _two_pass_fwd_grouped_kernel_v2
-        else:
-            raise ValueError(f"Unknown version: {version}")
+    if version == "v1":
+        assert (
+            NUM_PIPELINE_STAGES is not None
+        ), "Must specify NUM_PIPELINE_STAGES for version v1"
+        kernel: triton.runtime.JITFunction = _two_pass_fwd_grouped_kernel_v1
+    elif version == "v2":
+        assert CHUNK_TILES_PER_PROGRAM is not None
+        assert schedule == "default", "schedule must be default for version v2"
+        kernel: triton.runtime.JITFunction = _two_pass_fwd_grouped_kernel_v2
+    else:
+        raise ValueError(f"Unknown version: {version}")
 
     if BLOCK_D is not None:
         assert dg % BLOCK_D == 0, f"{__file__}: dg must be multiple of BLOCK_D"
 
     if filter_len < 128 and seqlen > 1024 and CHUNK_SIZE is not None:
-        assert CHUNK_SIZE >= 128, f"{__file__}: CHUNK_SIZE must be >= 128 for hl < 128 and seqlen > 1024"
+        assert (
+            CHUNK_SIZE >= 128
+        ), f"{__file__}: CHUNK_SIZE must be >= 128 for hl < 128 and seqlen > 1024"
 
     if CHUNK_TILES_PER_PROGRAM is not None and CHUNK_SIZE is not None:
         assert triton.cdiv(seqlen, CHUNK_SIZE) % CHUNK_TILES_PER_PROGRAM == 0
@@ -195,7 +201,9 @@ def two_pass_fwd_grouped(
         y2 = None
 
     if return_toeplitz:
-        assert CHUNK_SIZE is not None, "CHUNK_SIZE must be specified for return_toeplitz"
+        assert (
+            CHUNK_SIZE is not None
+        ), "CHUNK_SIZE must be specified for return_toeplitz"
         # NOTE: Need to initialize T_hat as zeros, since not all chunks need correction term
         T = torch.zeros(g, CHUNK_SIZE, CHUNK_SIZE, device=x.device, dtype=x.dtype)
         T_hat = torch.zeros_like(T)
@@ -274,7 +282,9 @@ def two_pass_fwd_grouped(
         )
         return compiled_kernel, kernel_args, kernel_constexprs
     else:
-        compiled_kernel: triton.compiler.CompiledKernel = kernel[grid](*kernel_args, **kernel_constexprs)
+        compiled_kernel: triton.compiler.CompiledKernel = kernel[grid](
+            *kernel_args, **kernel_constexprs
+        )
 
         y = y.reshape(bs, seqlen, g, dg)
         if y2 is not None:
@@ -290,7 +300,9 @@ def two_pass_fwd_grouped(
             return y, T, T_hat, y2, bx_lag
         else:
             # Autotune path
-            keys = [k for k in kernel.cache.keys() if kernel.cache[k] == kernel.best_config]
+            keys = [
+                k for k in kernel.cache.keys() if kernel.cache[k] == kernel.best_config
+            ]
             # Filter for best key, as best_config can be the same for multiple keys
             # TODO: improve this since this is a bit hacky
             # Key is best key if the kernel args match those of the current kernel args and the dtype is the same
@@ -298,16 +310,250 @@ def two_pass_fwd_grouped(
             best_key = [
                 k
                 for k in keys
-                if k[: len(kernel.key_idx)] == (bs, seqlen, g, dg) and k[len(kernel.key_idx)] == str(x.dtype)
+                if k[: len(kernel.key_idx)] == (bs, seqlen, g, dg)
+                and k[len(kernel.key_idx)] == str(x.dtype)
             ]
             assert len(best_key) == 1
             # print(f"Autotune Best Config {kernel.best_config} for keys {best_key}")
-            autotune_result = AutotunedResult(best_config=kernel.best_config, key=best_key[0])
+            autotune_result = AutotunedResult(
+                best_config=kernel.best_config, key=best_key[0]
+            )
 
             if return_kernel:
                 return y, T, T_hat, y2, compiled_kernel, autotune_result
 
             return y, T, T_hat, y2, autotune_result
+
+
+def two_pass_fwd_grouped_refactor(
+    x: torch.Tensor,
+    B: torch.Tensor,
+    C: torch.Tensor,
+    h: torch.Tensor,
+    y: torch.Tensor = None,
+    return_bx: bool = True,
+    return_y2: bool = True,  # y2 = T_local @ B*x + T_hat @ B_lag*x_lag
+    verbose: bool = False,
+    schedule: str = "default",
+    autotune: bool = False,
+    CHUNK_SIZE: int = None,
+    BLOCK_D: int = None,
+    CHUNK_TILES_PER_PROGRAM: int = 1,
+    THREADBLOCK_SWIZZLE: str = "row",
+    # common triton kernel kwargs
+    num_warps: int = 4,
+    # TODO: Make sure to set match these defaults to those in CUDAOptions
+    num_stages: int = 3,  # for tl.dot, should default to 3
+    num_ctas: int = 1,
+    maxnreg: int = None,
+    # aot compile
+    warmup: bool = False,
+    **kwargs,
+) -> Union[torch.tensor, tuple[triton.compiler.CompiledKernel, tuple[Any], tuple[Any]]]:
+    """
+    cgcg 2-pass with grouped filters
+
+    `g`: number of groups along feature dim:
+    `dg`: number of features per group
+
+    Assumptions:
+        - g == 1: single filter shared among all features
+        - 1 < g < d: `g` groups where each group has `dg` features.  `dg` must be power of 2 and > `16`
+        to leverage tensorcores.
+        - g == d: each feature has its own filter, not implemented currently since this results in GEMV
+
+    - x, B, C: bs x l x g x dg where g * dg = hidden_dim.
+    - h: g x 1 x hl where hl is the filter length and must fit within chunk_size
+
+    Args:
+        x (torch.tensor): (bs, l, g, dg)
+        B (torch.tensor): same shape as x
+        C (torch.tensor): same shape as x
+        h (torch.tensor): (g, 1, hl)
+        y (Optional[torch.tensor]): (bs, l, g, dg), pre-allocated output
+        autotune (bool): If true, use autotuning.
+        schedule (str): One of "default" or "persistent":
+        - "default" launches a 1-d grid with num programs == total tiles
+        - "persistent" launches num_programs = min(NUM_SM, total_tiles), the idea being that
+        reuse of CTAs should allow for better pipelining (hiding memory latency).
+        CHUNK_SIZE, BLOCK_D, num_warps, num_stages, NUM_PIPELINE_STAGES: these are for running a manually configured kernel
+        If any are specified, all must be specified.
+        NOTE: NUM_PIPELINE_STAGES is for pipelining `tl.range` as opposed to `num_stages` which is used for GEMM pipelining.
+        warmup (bool): If true, compile the kernel and return the compiled kernel.
+        return_kernel (bool): If true, run and return the compiled kernel.
+        return_autotune_result (bool): If true, return the autotune result.  Only valid if `autotune=True`.
+    Returns:
+        Return type dependent on `warmup`, `return_kernel`, `return_autotune_result`
+        - default is `y` the output tensor with shape (bs, l, g, dg)
+        - if `warmup=True`, then the compiled kernel (triton.compiler.CompiledKernel) along with kernel args and kernel constexprs are returned
+        - if `return_kernel=True`, then the `y` is returned along with the kernel (triton.runtime.JITFunction)
+        - if `return_autotune_result=True`, then a 2-tuple of `y` and the autotuned result (see AutotunedResult) is returned
+    """
+
+    bs, seqlen, g, dg = x.shape
+
+    # basic shape checks
+    assert dg >= 16, "dg must be >= 16 to use tensor-cores"
+    assert x.shape == B.shape == C.shape
+    hg, _in_channel_div_group, filter_len = h.shape
+    assert hg == g
+    assert _in_channel_div_group == 1
+
+    # hidden_dim
+    d = g * dg
+
+    x = x.reshape(bs, seqlen, d)
+    B = B.reshape_as(x)
+    C = C.reshape_as(x)
+    batch_stride, row_stride, col_stride = x.stride()
+
+    # triton kernel pre-condition
+    assert x.is_contiguous()
+    assert B.is_contiguous()
+    assert C.is_contiguous()
+
+    # Reshape h to a 2-D tensor
+    h = h.reshape(g, filter_len)
+    assert h.is_contiguous()
+
+    assert not (
+        autotune and warmup
+    ), "autotune and warmup are not supported, use return_kernel=True to get the kernel after autotuning"
+
+    if CHUNK_SIZE is not None and BLOCK_D is not None and autotune:
+        print(
+            "WARNING: CHUNK_SIZE and BLOCK_D are both specified, autotuning will be disabled"
+        )
+        autotune = False
+
+    if autotune:
+        kernel = _two_pass_fwd_refactor_autotuned
+        if verbose:
+            print(f"Number of autotune configs: {len(kernel.configs)}")
+    else:
+        assert all(
+            [
+                CHUNK_SIZE,
+                BLOCK_D,
+            ]
+        ), "Must specify all of CHUNK_SIZE, BLOCK_D, CHUNK_TILES_PER_PROGRAM"
+        kernel = _two_pass_fwd_refactor_kernel
+
+    if BLOCK_D is not None:
+        assert dg % BLOCK_D == 0, f"{__file__}: dg must be multiple of BLOCK_D"
+
+    if filter_len < 128 and seqlen > 1024 and CHUNK_SIZE is not None:
+        assert (
+            CHUNK_SIZE >= 128
+        ), f"{__file__}: CHUNK_SIZE must be >= 128 for hl < 128 and seqlen > 1024"
+
+    if CHUNK_TILES_PER_PROGRAM is not None and CHUNK_SIZE is not None:
+        assert triton.cdiv(seqlen, CHUNK_SIZE) % CHUNK_TILES_PER_PROGRAM == 0
+
+    if schedule == "default":
+        # if version == "v2":
+
+        def _1d_grid(META):
+            row_tiles = triton.cdiv(seqlen, META["CHUNK_SIZE"])
+            # Each program processes CHUNK_TILES_PER_PROGRAM tiles
+            # assert row_tiles % META["CHUNK_TILES_PER_PROGRAM"] == 0
+            grid_chunks = triton.cdiv(row_tiles, META["CHUNK_TILES_PER_PROGRAM"])
+
+            col_tiles = triton.cdiv(d, META["BLOCK_D"])
+            # total_tiles = bs * row_tiles * col_tiles
+            total_programs = bs * grid_chunks * col_tiles
+
+            return (total_programs,)
+
+        NUM_PIPELINE_STAGES = 0
+        grid = _1d_grid
+    elif schedule == "persistent":
+        raise NotImplementedError("Skip persistent for now")
+    else:
+        raise ValueError(f"schedule {schedule} not implemented")
+
+    if y is None:
+        y = torch.zeros_like(x)
+
+    # For backwards
+    if return_y2:
+        y2 = torch.empty_like(x)
+    else:
+        y2 = None
+
+    if return_bx:
+        bx = torch.zeros_like(x)
+    else:
+        bx = None
+
+    if verbose:
+        print(f"{x.shape=}, {B.shape=}, {C.shape=}, {h.shape=}, {y.shape=}")
+        print(f"{bs=} {seqlen=} {g=} {dg=} {filter_len=}")
+        print(f"{CHUNK_SIZE=}, {BLOCK_D=}, {num_warps=}, {CHUNK_TILES_PER_PROGRAM=}")
+
+    kernel_args = (
+        # Input tensors
+        x,
+        B,
+        C,
+        h,
+        # Intermediate activation buffers
+        bx,
+        y2,
+        y,
+        # Shapes
+        batch_stride,
+        row_stride,
+        col_stride,
+        bs,
+        seqlen,
+        g,
+        dg,
+    )
+
+    kernel_constexprs = {
+        "FILTER_LEN": filter_len,
+        "SINGLE_GROUP": g == 1,
+        "RETURN_Y2": return_y2,
+    }
+    if not autotune:
+        pass
+        # kernel_constexprs.update(
+        #     {
+        #         "CHUNK_SIZE": CHUNK_SIZE,
+        #         "BLOCK_D": BLOCK_D,
+        #         "THREADBLOCK_SWIZZLE": THREADBLOCK_SWIZZLE,
+        #         "num_warps": num_warps,
+        #         "num_stages": num_stages,
+        #         "num_ctas": num_ctas,
+        #         "CHUNK_TILES_PER_PROGRAM": CHUNK_TILES_PER_PROGRAM,
+        #     }
+        # )
+
+    if warmup:
+        compiled_kernel: triton.compiler.CompiledKernel = kernel.warmup(
+            *kernel_args, **kernel_constexprs, grid=(1,)
+        )
+        return compiled_kernel, kernel_args, kernel_constexprs
+    else:
+        compiled_kernel: triton.compiler.CompiledKernel = kernel[grid](
+            *kernel_args, **kernel_constexprs
+        )
+        if verbose and autotune:
+            print(f"Best autotuned config: {kernel.best_config.all_kwargs()}")
+        y = y.reshape(bs, seqlen, g, dg)
+        if y2 is not None:
+            y2 = y2.reshape(bs, seqlen, g, dg)
+
+        if bx is not None:
+            bx = bx.reshape(bs, seqlen, g, dg)
+
+        return (
+            # only first three are needed for refactored kernel
+            bx,
+            y2,
+            y,
+        )
 
 
 # if __name__ == "__main__":

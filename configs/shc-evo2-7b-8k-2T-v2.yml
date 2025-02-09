@@ -2,13 +2,13 @@ model_name: shc-evo2-7b-8k-2T-v2
 
 vocab_size: 512
 hidden_size: 4096
-# Number of long convolution filters in each hyena block. Can be smaller than `hidden_size`
 num_filters: 4096
 hcl_layer_idxs: [2,6,9,13,16,20,23,27,30]
 hcm_layer_idxs: [1,5,8,12,15,19,22,26,29]
 hcs_layer_idxs: [0,4,7,11,14,18,21,25,28]
 attn_layer_idxs: [3,10,17,24,31]
 
+# Number of unique convolution filters in each hyena block. Can be smaller than `hidden_size`
 hcm_filter_length: 128
 hcl_filter_groups: 4096
 hcm_filter_groups: 256
@@ -57,4 +57,4 @@ inference_mode: True
 tokenizer_type: CharLevelTokenizer 
 prefill_style: fft
 mlp_activation: gelu
-print_activations: True
+print_activations: False
