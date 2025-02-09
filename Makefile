@@ -3,35 +3,55 @@
 PYTHON := python3.11
 UV := uv
 VENV_BIN := $(CURDIR)/.venv/bin
+CONDA_ENV_NAME := vortex
 
 PYTHON_VERSION := $(shell $(PYTHON) -c 'import sys; print(sys.version_info[0])')
+TARGET_PYTHON_VERSION := 3.11
 CUDA_PATH := /usr/local/cuda
 CUDA_INCLUDE_PATH := $(CUDA_PATH)/include
 CUDA_LIB_PATH := $(CUDA_PATH)/lib64
 CPATH := $(CUDA_INCLUDE_PATH):/usr/local/cuda/include
 CUDACXX := /usr/local/cuda/bin/nvcc
-	
-define _SANITY_ENV_CHECK_MESSAGE
-Test
-endef
-export _SANITY_ENV_CHECK_MESSAGE
+
+_detect_cuda_path:
+ifndef CUDA_PATH
+    NVCC_BIN := $(shell which nvcc 2>/dev/null)
+    ifneq ($(NVCC_BIN),)
+        # Derive CUDA_PATH by going one directory up from nvcc's bin directory
+        CUDA_PATH := $(dir $(NVCC_BIN))..
+        CUDA_PATH := $(realpath $(CUDA_PATH))
+    endif
+endif
 
 _check_env_enabled:
-ifeq ($(CONDA_DEFAULT_ENV), base)
-	@echo "You are trying to install vortex in the base conda environment, skipping"
-	exit 1
-else ifeq ($(IS_CONDA_ENV), true)
-	@echo "Using conda environment: $(CONDA_PREFIX) $(shell python3 --version)"
-else ifeq ($(IS_VENV), true)
-	@echo "Using venv: $(VIRTUAL_ENV) $(shell python3 --version)"
+ifneq ($(VIRTUAL_ENV),)
+    $(info Detected active Python venv at $(VIRTUAL_ENV))
+    ENV_ACTIVE := UV        # Using a UV/venv environment
+else ifdef CONDA_PREFIX
+    $(info Detected Conda environment "$(CONDA_DEFAULT_ENV)")
+    ENV_ACTIVE := CONDA     # Using a Conda environment
 else
-	@echo "$$_SANITY_ENV_CHECK_MESSAGE"
-	exit 1
+    ENV_ACTIVE := NONE      # No environment active
 endif
-ifeq ($(PYTHON_OK), no)
-	@echo "Python version is less than $(PYTHON_MIN_VERSION)"
-	@echo "$$_SANITY_ENV_CHECK_MESSAGE"
-	exit 1
+
+ifeq ($(CONDA_DEFAULT_ENV), base)
+    $(info Base Conda environment detected; skipping new environment setup)
+    ENV_ACTIVE := BASE_CONDA
+endif
+
+_setup_missing_env:
+ifeq ($(ENV_ACTIVE), NONE)
+    ifneq ($(shell which uv 2>/dev/null),)
+        $(info No env active; creating a new uv virtual environment)
+        uv venv .venv --python=$(TARGET_PYTHON_VERSION)
+        source .venv/bin/activate    # activate it for the remainder of the make
+    else ifneq ($(shell which conda 2>/dev/null),)
+        $(info No env active; creating a new Conda environment)
+        conda env create -n $(CONDA_ENV_NAME) -f environment.yml 
+        conda activate $(CONDA_ENV_NAME)
+    else
+        $(error Neither uv nor Conda is available for environment creation)
+    endif
 endif
 
 
@@ -43,13 +63,9 @@ setup-full: submodules
 	$(UV) pip install transformer_engine[pytorch] --no-build-isolation 
 	cd vortex/ops/attn && MAX_JOBS=32 $(UV) pip install -v -e  . --no-build-isolation
 
-setup-vortex-ops: submodules
-	$(UV) venv
-	. $(VENV_BIN)/activate
-	$(UV) pip install ninja cmake pybind11 numpy psutil
-	$(UV) pip install -e .
-	$(UV) pip install transformer_engine[pytorch] --no-build-isolation 
-	cd vortex/ops/attn && MAX_JOBS=32 $(UV) pip install -v -e  . --no-build-isolation
+setup-vortex-ops: submodules _check_env_enabled _setup_missing_env
+	pip install ninja cmake pybind11 numpy psutil
+	pip install -e .
 
 submodules:
 	git submodule update --init --recursive
