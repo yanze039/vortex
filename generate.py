@@ -9,10 +9,12 @@ import argparse
 import torch
 import yaml
 
-from vortex.model.generation import Generator
+from vortex.model.generation import generate
 from vortex.model.model import StripedHyena
 from vortex.model.tokenizer import HFAutoTokenizer, CharLevelTokenizer
-from vortex.model.utils import dotdict, print_rank_0
+from vortex.model.utils import dotdict, print_rank_0, load_checkpoint
+
+import logging
 
 import logging
 
@@ -61,17 +63,12 @@ if __name__ == "__main__":
         tokenizer = HFAutoTokenizer(config.vocab_file)
 
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-    with torch.device(device):
-        m = StripedHyena(config).to(torch.float32)
+    m = StripedHyena(config)
 
-    if not args.dry_run:
-        if args.checkpoint_path:
-            # inv_freq are instantiated as parameters
-            m.custom_load_state_dict(
-                torch.load(args.checkpoint_path, map_location=device), strict=False
-            )
+    if args.dry_run:
+        args.checkpoint_path = None
 
-    m.to_bfloat16_except_pr_lc()
+    load_checkpoint(m, args.checkpoint_path)
 
     print_rank_0(f"Number of parameters: {sum(p.numel() for p in m.parameters())}")
 
@@ -79,20 +76,16 @@ if __name__ == "__main__":
         input_string = f.read()
     print_rank_0(f"Prompt: {input_string}", end="\n\n")
 
-    with torch.inference_mode():
-        g = Generator(
-            m,
-            tokenizer,
+    print_rank_0(
+        generate(
+            prompt_seqs=[input_string],
+            n_tokens=args.num_tokens,
+            model=m,
+            tokenizer=tokenizer,
             top_k=args.top_k,
             top_p=args.top_p,
             temperature=args.temperature,
-        )
-        g.generate(
-            num_tokens=args.num_tokens,
-            cached_generation=args.cached_generation,
-            input_string=input_string,
+            verbose=2 if args.debug else 0,
             device=device,
-            verbose=True,
-            print_generation=args.debug,
-            max_seqlen=8192,
         )
+    )

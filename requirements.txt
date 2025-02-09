@@ -7,6 +7,8 @@ pre-commit
 # install ninja as well: https://github.com/ninja-build/ninja
 # transformer_engine is also required:pip install git+https://github.com/NVIDIA/TransformerEngine.git@stable
 
+biopython # for tests
+
 ### flashfftconv: uncomment both for use_flash_depthwise or use_flashfft
 # git+https://github.com/HazyResearch/flash-fft-conv.git#subdirectory=csrc/flashfftconv
 # git+https://github.com/HazyResearch/flash-fft-conv.git

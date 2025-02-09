@@ -10,7 +10,37 @@ Standalone implementation of computational primitives for deep signal processing
 
 While installation of the a `vortex`-specific environment is recommended for generation with `vortex`, we also provide an interface for using the primitives with a lightweight installation process:
 
-## Environment setup (uv)
+## Inference
+
+### In Docker environment
+
+To run 40b generation sample, simply execute:
+
+```bash
+./run
+```
+
+To run 7b generation sample, simply execute:
+
+```bash
+sz=7 ./run
+```
+
+To run tests:
+
+```bash
+./run ./run_tests
+```
+
+To interactively execute commands in docker environment:
+
+```bash
+./run bash
+```
+
+### Without Docker
+
+#### Environment setup (uv)
 
 To run e2e installation in a uv environment, use the following command:
 ```bash
