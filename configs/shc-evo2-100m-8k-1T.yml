@@ -38,7 +38,7 @@ column_split_hyena: False
 column_split: True
 interleave: True
 # Layer > 0 nn.identity activation
-evo_2_style_activations: True
+evo2_style_activations: True
 # Legacy options for MP / PP inference
 model_parallel_size: 1
 pipe_parallel_size: 1

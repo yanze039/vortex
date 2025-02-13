@@ -701,7 +701,11 @@ class StripedHyena(nn.Module):
                 "flashfftconv not installed"
         else:
             self.flash_fft = None
-
+        if not self.config.get('evo2_style_activations', False):
+            self.logger.warning(
+                "⚠️  Not using Evo2 style activations  ⚠️\n"
+                "⚠️ Set 'evo2_style_activations: True' in config if you are using Evo 2 checkpoints ⚠️"
+            )
         self.logger.info(f"Initializing {config.num_layers} blocks...")
         self.blocks = nn.ModuleList()
         self.block_idx_to_device = {}

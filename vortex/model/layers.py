@@ -161,7 +161,7 @@ class ParallelGatedMLP(nn.Module):
         else:
             raise NotImplementedError
         
-        if self.layer_idx > 0 and config.get("evo_2_style_activations", False):
+        if self.layer_idx > 0 and config.get("evo2_style_activations", False):
             self.act = nn.Identity()
 
         self.multiple_of = multiple_of * config.model_parallel_size
