@@ -35,6 +35,8 @@ hyena_filter_groups: 1
 column_split_hyena: False
 column_split: True
 interleave: True
+# Layer > 0 nn.identity activation
+evo_2_style_activations: True
 
 use_fp8_input_projections: True
 

@@ -24,9 +24,7 @@ mlp_init_method: torch.nn.init.zeros_
 mlp_output_init_method: torch.nn.init.zeros_
 eps: 0.000001
 state_size: 16
-rotary_emb_base: 100000000
-rotary_emb_scaling_factor: 16 
-use_interpolated_rotary_pos_emb: True
+rotary_emb_base: 10000 
 make_vocab_size_divisible_by: 8
 inner_size_multiple_of: 16  # force GLU inner_size to be a multiple of
 inner_mlp_size: 11008
@@ -38,9 +36,6 @@ hyena_filter_groups: 1
 # Split strategy for channels
 column_split_hyena: False
 column_split: True
-interleave: True
-# Layer > 0 nn.identity activation
-evo_2_style_activations: True
 # Legacy options for MP / PP inference
 model_parallel_size: 1
 pipe_parallel_size: 1
@@ -49,8 +44,8 @@ mha_out_proj_bias: True
 hyena_out_proj_bias: True
 hyena_flip_x1x2: False
 qkv_proj_bias: False
-use_fp8_input_projections: True
-max_seqlen: 131072
+use_fp8_input_projections: False
+max_seqlen: 32768
 max_batch_size: 1
 final_norm: True 
 use_flash_attn: True
