@@ -96,8 +96,8 @@ def main():
     python ./test/generation/test_generation.py --config_path <config_path> --checkpoint_path <path.pt>
 
     Expected results (direct comparison of sequences, no alignment):
-    Evo 2 40b 1m: 91.15%
-    Evo 2 7b 1m: 89.25% 
+    Evo 2 40B 1m: 91.15%
+    Evo 2 7B 1m: 89.25% 
     '''
     import torch
 
@@ -109,11 +109,6 @@ def main():
     parser = argparse.ArgumentParser(description="Run StripedHyena Model")
     parser.add_argument("--config_path", required=True, help="Path to configuration file")
     parser.add_argument("--checkpoint_path", default=None, help="Path to checkpoint file")
-    parser.add_argument("--num_tokens", default=500, type=int, help="Number of tokens to generate.")
-    parser.add_argument("--temperature", default=1.0, type=float)
-    parser.add_argument("--top_k", default=1, type=int)
-    parser.add_argument("--top_p", default=1.0, type=float)
-    parser.add_argument("--generations_per_prompt", default=1, type=int)
     parser.add_argument(
         "--cached_generation",
         action="store_true",
@@ -124,6 +119,12 @@ def main():
     torch.cuda.manual_seed(1)
 
     args = parser.parse_args()
+
+    args.num_tokens = 500
+    args.temperature = 1.0
+    args.top_k = 1
+    args.top_p = 1.0
+    args.generations_per_prompt = 1
 
     config = dotdict(yaml.load(open(args.config_path), Loader=yaml.FullLoader))
 
@@ -149,8 +150,25 @@ def main():
     )
 
     print(scores)
+    mean_score = np.mean(scores)
     print("\% Matching Nucleotides")
-    print(np.mean(scores))
+    print(mean_score)
+
+    if '40b' in args.checkpoint_path:
+        assert mean_score - 91.15 < 1e-1, f"Expected mean score of 91.15, got {mean_score}"
+        passed = False
+    elif '7b' in args.checkpoint_path:
+        assert mean_score - 89.25 < 1e-1, f"Expected mean score of 89.25, got {mean_score}"
+        passed = False
+    else:
+        raise ValueError(f"Testing is only for Evo 2 7B and 40B, got {args.checkpoint_path})")
+
+    if passed:
+        print("Test Passed")
+    else:
+        print("Test Failed")
+
+    
 
 if __name__ == "__main__":
     main()
