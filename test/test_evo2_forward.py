@@ -37,16 +37,6 @@ def test_dna_model(model, device="cuda:0"):
 
     Returns:
         tuple: (original sequence, predicted sequence, accuracy)
-
-    Expected results:
-
-    Evo 2 40B
-    Mean Loss: 0.216
-    Mean Accuracy: 91.673%
-
-    Evo 2 7B
-    Mean Loss: 0.348
-    Mean Accuracy: 86.346%
     """
     
     sequences = read_prompts('./test/data/prompts.csv')
@@ -95,9 +85,25 @@ def test_dna_model(model, device="cuda:0"):
 
 if __name__ == "__main__":
     """
-    Test checkpoint correctenss by doing a teacher forced forward pass on a conserved gene.
+    Test setup correctness by doing a teacher forced forward pass on a conserved gene.
+    Make sure you are using the correct config and checkpoint for the model you are testing.
 
     python ./test/generation/test_generation.py --config_path <config_path> --checkpoint_path <path.pt>
+
+    Expected results:
+
+    Evo 2 40B
+    Mean Loss: 0.216
+    Mean Accuracy: 91.673%
+
+    Evo 2 7B
+    Mean Loss: 0.348
+    Mean Accuracy: 86.346%
+    
+    Evo 2 1B base
+    Mean Loss: 0.502
+    Mean Accuracy: 79.556%
+    
     """
     parser = argparse.ArgumentParser(description="Run StripedHyena Model")
     parser.add_argument(
@@ -111,6 +117,8 @@ if __name__ == "__main__":
     torch.cuda.manual_seed(1)
 
     args = parser.parse_args()
+    assert any(model in path for model in ['evo2-40b-1m', 'evo2-7b-1m', 'evo2-1b-8k'] 
+            for path in [args.config_path]), "Testing is only for Evo 2 7B and 40B"
 
     config = dotdict(yaml.load(open(args.config_path), Loader=yaml.FullLoader))
 
@@ -129,17 +137,23 @@ if __name__ == "__main__":
     print(f"\nMean Loss: {mean_loss:.3f}")
     print(f"Mean Accuracy: {mean_accuracy * 100:.3f}%\n")
 
-    passed = True
-    if '40b' in args.checkpoint_path.lower():
-        if not abs(mean_loss - 0.2159424) < 1e-3:  # epsilon for float comparison
-            print(f"Test Failed: Expected loss of 0.2159424, got {mean_loss}")
+    eps = 1e-3 # epsilon for float comparison
+    passed = None
+    if 'evo2-40b-1m' in args.config_path:
+        if not abs(mean_loss - 0.2159424) < eps: 
+            print(f"Test Failed: Expected loss of 0.21594, got {mean_loss}")
             passed = False
-    elif '7b' in args.checkpoint_path.lower():
-        if not abs(mean_loss - 0.3476563) < 1e-3:  # epsilon for float comparison
-            print(f"Test Failed: Expected loss of 0.3476563, got {mean_loss}")
+    elif 'evo2-7b-1m' in args.config_path:
+        if not abs(mean_loss - 0.3476563) < eps: 
+            print(f"Test Failed: Expected loss of 0.34766, got {mean_loss}")
+            passed = False
+    elif 'evo2-1b-8k' in args.config_path:
+        if not abs(mean_loss - 0.501953125) < eps:
+            print(f"Test Failed: Expected loss of 0.50195, got {mean_loss}")
             passed = False
     else:
-        raise ValueError(f"Testing is only supported for Evo 2 7B and 40B models, got {args.checkpoint_path}")
+        print(f"Test Failed: Unexpected model config path {args.config_path}")
+        passed = False
 
     if passed:
         print("Test Passed!")

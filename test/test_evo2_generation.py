@@ -93,11 +93,13 @@ def calculate_sequence_identity(seq1: str, seq2: str) -> Optional[float]:
 
 def main():
     '''
+    Test setup cortectness by greedily generating sequences from prompts and comparing to the target sequences. 
     python ./test/generation/test_generation.py --config_path <config_path> --checkpoint_path <path.pt>
 
-    Expected results (direct comparison of sequences, no alignment):
+    Expected results (direct comparison of sequences without alignment):
     Evo 2 40B 1m: 91.15%
     Evo 2 7B 1m: 89.25% 
+    Evo 2 1B base: 68.0%
     '''
     import torch
 
@@ -119,6 +121,8 @@ def main():
     torch.cuda.manual_seed(1)
 
     args = parser.parse_args()
+    assert any(model in path for model in ['evo2-40b-1m', 'evo2-7b-1m', 'evo2-1b-8k'] 
+            for path in [args.config_path]), "Testing is only for Evo 2 40B, Evo 2 7B, and Evo 2 1B base"
 
     args.num_tokens = 500
     args.temperature = 1.0
@@ -154,14 +158,21 @@ def main():
     print("\% Matching Nucleotides")
     print(mean_score)
 
-    if '40b' in args.checkpoint_path:
-        assert mean_score - 91.15 < 1e-1, f"Expected mean score of 91.15, got {mean_score}"
+    eps = 1e-1 # epsilon for float comparison
+    passed = None
+    if 'evo2-40b-1m' in args.config_path:
+        assert mean_score - 91.15 < eps, f"Expected mean score of 91.15, got {mean_score}"
         passed = False
-    elif '7b' in args.checkpoint_path:
-        assert mean_score - 89.25 < 1e-1, f"Expected mean score of 89.25, got {mean_score}"
+    elif 'evo2-7b-1m' in args.config_path:
+        assert mean_score - 89.25 < eps, f"Expected mean score of 89.25, got {mean_score}"
+        passed = False
+    elif 'evo2-1b-8k' in args.config_path:
+        assert mean_score - 68.0 < eps, f"Expected mean score of 68.0, got {mean_score}"
         passed = False
     else:
-        raise ValueError(f"Testing is only for Evo 2 7B and 40B, got {args.checkpoint_path})")
+        print(f"Test Failed: Did not recognize config path {args.config_path}")
+        print("Test only supports Evo 2 40B, Evo 2 7B, or Evo 2 1B base")
+        passed = False
 
     if passed:
         print("Test Passed")
