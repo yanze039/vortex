@@ -160,6 +160,9 @@ class ParallelGatedMLP(nn.Module):
             self.act = F.silu
         else:
             raise NotImplementedError
+        
+        if self.layer_idx > 0 and config.get("evo2_style_activations", False):
+            self.act = nn.Identity()
 
         self.multiple_of = multiple_of * config.model_parallel_size
 
@@ -188,8 +191,6 @@ class ParallelGatedMLP(nn.Module):
     def forward(self, z):
         z1, z2 = self.l1(z), self.l2(z)
         z1, z2 = grab_first_if_tuple(z1), grab_first_if_tuple(z2)
-        if self.layer_idx > 0:
-            self.act = nn.Identity()
         y = self.l3(self.act(z1) * z2)
         return grab_first_if_tuple(y)
 

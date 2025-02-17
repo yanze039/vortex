@@ -54,7 +54,6 @@ def generate_and_score(*, sequences, model, tokenizer, args, generations_per_pro
         target = targets[i]
 
         with torch.inference_mode():
-            # for tokenized_prompt in tokenized_prompts:
 
             ret = generate(
                 prompt_seqs=[prompt],
@@ -67,6 +66,7 @@ def generate_and_score(*, sequences, model, tokenizer, args, generations_per_pro
                 device=device,
                 verbose=1,
                 cached_generation=args.cached_generation,
+                force_prompt_threshold=5000,
             )
 
             decoded_seq = ret.sequences[0]
@@ -93,11 +93,13 @@ def calculate_sequence_identity(seq1: str, seq2: str) -> Optional[float]:
 
 def main():
     '''
+    Test setup cortectness by greedily generating sequences from prompts and comparing to the target sequences. 
     python ./test/generation/test_generation.py --config_path <config_path> --checkpoint_path <path.pt>
 
-    Expected results (direct comparison of sequences, no alignment):
-    Evo 2 40b 1m: 91.15%
-    Evo 2 7b 1m: 89.25% 
+    Expected results (direct comparison of sequences without alignment):
+    Evo 2 40B 1m: 91.15%
+    Evo 2 7B 1m: 89.25% 
+    Evo 2 1B base: 68.0%
     '''
     import torch
 
@@ -109,11 +111,6 @@ def main():
     parser = argparse.ArgumentParser(description="Run StripedHyena Model")
     parser.add_argument("--config_path", required=True, help="Path to configuration file")
     parser.add_argument("--checkpoint_path", default=None, help="Path to checkpoint file")
-    parser.add_argument("--num_tokens", default=500, type=int, help="Number of tokens to generate.")
-    parser.add_argument("--temperature", default=1.0, type=float)
-    parser.add_argument("--top_k", default=1, type=int)
-    parser.add_argument("--top_p", default=1.0, type=float)
-    parser.add_argument("--generations_per_prompt", default=1, type=int)
     parser.add_argument(
         "--cached_generation",
         action="store_true",
@@ -124,6 +121,14 @@ def main():
     torch.cuda.manual_seed(1)
 
     args = parser.parse_args()
+    assert any(model in path for model in ['evo2-40b-1m', 'evo2-7b-1m', 'evo2-1b-8k'] 
+            for path in [args.config_path]), "Testing is only for Evo 2 40B, Evo 2 7B, and Evo 2 1B base"
+
+    args.num_tokens = 500
+    args.temperature = 1.0
+    args.top_k = 1
+    args.top_p = 1.0
+    args.generations_per_prompt = 1
 
     config = dotdict(yaml.load(open(args.config_path), Loader=yaml.FullLoader))
 
@@ -149,8 +154,32 @@ def main():
     )
 
     print(scores)
+    mean_score = np.mean(scores)
     print("\% Matching Nucleotides")
-    print(np.mean(scores))
+    print(mean_score)
+
+    eps = 1e-1 # epsilon for float comparison
+    passed = None
+    if 'evo2-40b-1m' in args.config_path:
+        assert mean_score - 91.15 < eps, f"Expected mean score of 91.15, got {mean_score}"
+        passed = False
+    elif 'evo2-7b-1m' in args.config_path:
+        assert mean_score - 89.25 < eps, f"Expected mean score of 89.25, got {mean_score}"
+        passed = False
+    elif 'evo2-1b-8k' in args.config_path:
+        assert mean_score - 68.0 < eps, f"Expected mean score of 68.0, got {mean_score}"
+        passed = False
+    else:
+        print(f"Test Failed: Did not recognize config path {args.config_path}")
+        print("Test only supports Evo 2 40B, Evo 2 7B, or Evo 2 1B base")
+        passed = False
+
+    if passed:
+        print("Test Passed")
+    else:
+        print("Test Failed")
+
+    
 
 if __name__ == "__main__":
     main()
