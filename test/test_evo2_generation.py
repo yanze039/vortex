@@ -71,6 +71,8 @@ def generate_and_score(*, sequences, model, tokenizer, args, generations_per_pro
             decoded_seq = ret.sequences[0]
             score = calculate_sequence_identity(decoded_seq, target)
             scores.append(score)
+    
+    return scores
 
 
 def calculate_sequence_identity(seq1: str, seq2: str) -> Optional[float]:
@@ -139,33 +141,26 @@ def main():
     sequences = read_prompts("./test/data/prompts.csv")
 
     scores = generate_and_score(
-        sequences,
-        g,
-        tokenizer,
-        args,
-        generations_per_prompt=args.generations_per_prompt,
-    )
-
-    scores = generate_and_score(
-        sequences=sequences, model=m, tokenizer=tokenizer, args=args, generations_per_prompt=args.generations_per_prompt
+        sequences=sequences,
+        model=m,
+        tokenizer=tokenizer,
+        args=args,
+        generations_per_prompt=args.generations_per_prompt
     )
 
     print(scores)
     mean_score = np.mean(scores)
-    print("\% Matching Nucleotides")
+    print("% Matching Nucleotides")
     print(mean_score)
 
     eps = 1e-1 # epsilon for float comparison
-    passed = None
+    passed = True
     if 'evo2-40b-1m' in args.config_path:
-        assert mean_score - 91.15 < eps, f"Expected mean score of 91.15, got {mean_score}"
-        passed = False
+        assert mean_score - 91.15 < eps, f"Test Failed: Expected mean score of 91.15, got {mean_score}"
     elif 'evo2-7b-1m' in args.config_path:
-        assert mean_score - 89.25 < eps, f"Expected mean score of 89.25, got {mean_score}"
-        passed = False
+        assert mean_score - 89.25 < eps, f"Test Failed: Expected mean score of 89.25, got {mean_score}"
     elif 'evo2-1b-8k' in args.config_path:
-        assert mean_score - 68.0 < eps, f"Expected mean score of 68.0, got {mean_score}"
-        passed = False
+        assert mean_score - 68.0 < eps, f"Test Failed: Expected mean score of 68.0, got {mean_score}"
     else:
         print(f"Test Failed: Did not recognize config path {args.config_path}")
         print("Test only supports Evo 2 40B, Evo 2 7B, or Evo 2 1B base")
