@@ -54,9 +54,7 @@ Refer to the [Dockerfile](Dockerfile) for a sample build. To run Evo 2 40B gener
 
 ## Acknowledgements
 
-Vortex was developed by Michael Poli ([Zymrael](https://github.com/Zymrael)).
-
-Vortex maintainers include Michael Poli ([Zymrael](https://github.com/Zymrael)), Garyk Brixi ([garykbrixi](https://github.com/garykbrixi)), Anton Vorontsov ([antonvnv](https://github.com/antonvnv)), Amy Lu ([exnx](https://github.com/amyxlu)), Jerome Ku ([jeromeku](https://github.com/jeromeku)).
+Vortex was developed by Michael Poli ([Zymrael](https://github.com/Zymrael)). Vortex maintainers include Michael Poli ([Zymrael](https://github.com/Zymrael)), Garyk Brixi ([garykbrixi](https://github.com/garykbrixi)), Anton Vorontsov ([antonvnv](https://github.com/antonvnv)) with contributions from Amy Lu ([amyxlu](https://github.com/amyxlu)), Jerome Ku ([jeromeku](https://github.com/jeromeku)).
 
 ## Cite
 
