@@ -1,10 +1,9 @@
 import itertools
-import math
 
 import triton
 import triton.language as tl
 
-from .kernel_utils import get_program_ids, is_power_of_2
+from .kernel_utils import get_program_ids
 from .toeplitz_kernels import (
     load_correction_toeplitz,
     load_toeplitz,
@@ -338,16 +337,10 @@ def _two_pass_fwd_grouped_kernel_v1(
     num_programs = tl.num_programs(0)
 
     row_range = tl.arange(0, CHUNK_SIZE)[:, None] * row_stride
-    col_range = (
-        tl.arange(0, BLOCK_D)[None, :] * col_stride
-    )  # not needed, since should be contiguous along feature dim
+    col_range = tl.arange(0, BLOCK_D)[None, :] * col_stride  # not needed, since should be contiguous along feature dim
 
-    for tile_id in tl.range(
-        start_pid, total_tiles, num_programs, num_stages=NUM_PIPELINE_STAGES
-    ):
-        pid_batch, pid_d, pid_chunk = get_program_ids(
-            tile_id, tiles_per_seq, d_tiles_per_chunk, chunks_per_seq
-        )
+    for tile_id in tl.range(start_pid, total_tiles, num_programs, num_stages=NUM_PIPELINE_STAGES):
+        pid_batch, pid_d, pid_chunk = get_program_ids(tile_id, tiles_per_seq, d_tiles_per_chunk, chunks_per_seq)
 
         # First determine offset by batch
         batch_offset = pid_batch * batch_stride
@@ -519,9 +512,7 @@ def _two_pass_fwd_grouped_kernel_v2(
     start_pid = tl.program_id(0)
 
     row_range = tl.arange(0, CHUNK_SIZE)[:, None] * row_stride
-    col_range = (
-        tl.arange(0, BLOCK_D)[None, :] * col_stride
-    )  # not needed, since should be contiguous along feature dim
+    col_range = tl.arange(0, BLOCK_D)[None, :] * col_stride  # not needed, since should be contiguous along feature dim
 
     pid_batch, pid_d, pid_chunk_start = get_program_ids(
         start_pid,
@@ -635,9 +626,7 @@ def _two_pass_fwd_grouped_kernel_v2(
         tl.store(out_idx, y)
 
 
-@triton.autotune(
-    configs=get_autotune_configs_refactor(), key=["bs", "seqlen", "g", "dg"]
-)
+@triton.autotune(configs=get_autotune_configs_refactor(), key=["bs", "seqlen", "g", "dg"])
 @triton.jit
 def _two_pass_fwd_refactor_kernel(
     # Input tensors
@@ -710,9 +699,7 @@ def _two_pass_fwd_refactor_kernel(
     start_pid = tl.program_id(0)
 
     row_range = tl.arange(0, CHUNK_SIZE)[:, None] * row_stride
-    col_range = (
-        tl.arange(0, BLOCK_D)[None, :] * col_stride
-    )  # not needed, since should be contiguous along feature dim
+    col_range = tl.arange(0, BLOCK_D)[None, :] * col_stride  # not needed, since should be contiguous along feature dim
 
     pid_batch, pid_d, pid_chunk_start = get_program_ids(
         start_pid,

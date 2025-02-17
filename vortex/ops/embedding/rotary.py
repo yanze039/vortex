@@ -91,12 +91,8 @@ def rotary_kernel(
         o0 = x0 * cos - x1 * sin
         o1 = x0 * sin + x1 * cos
         # write back result
-        OUT = OUT + (
-            rm[:, None] * stride_out_seqlen + rk_half[None, :] * stride_out_headdim
-        )
-        tl.store(
-            OUT, o0, mask=(rm[:, None] < seqlen) & (rk_half[None, :] < rotary_dim_half)
-        )
+        OUT = OUT + (rm[:, None] * stride_out_seqlen + rk_half[None, :] * stride_out_headdim)
+        tl.store(OUT, o0, mask=(rm[:, None] < seqlen) & (rk_half[None, :] < rotary_dim_half))
         tl.store(
             OUT + rotary_dim_half * stride_out_headdim,
             o1,
@@ -125,12 +121,8 @@ def rotary_kernel(
             mask=(rm_cs[:, None] < seqlen_ro) & (rk_repeat[None, :] < rotary_dim_half),
             other=0.0,
         ).to(tl.float32)
-        x0 = tl.load(
-            X0, mask=(rm[:, None] < seqlen) & (rk[None, :] < rotary_dim), other=0.0
-        ).to(tl.float32)
-        x1 = tl.load(
-            X1, mask=(rm[:, None] < seqlen) & (rk_swap[None, :] < rotary_dim), other=0.0
-        ).to(tl.float32)
+        x0 = tl.load(X0, mask=(rm[:, None] < seqlen) & (rk[None, :] < rotary_dim), other=0.0).to(tl.float32)
+        x1 = tl.load(X1, mask=(rm[:, None] < seqlen) & (rk_swap[None, :] < rotary_dim), other=0.0).to(tl.float32)
         if CONJUGATE:
             sin = -sin
         x0_cos = x0 * cos
@@ -167,9 +159,7 @@ def apply_rotary(
     if not is_varlen:
         batch, seqlen, nheads, headdim = x.shape
     else:
-        assert (
-            max_seqlen is not None
-        ), "If cu_seqlens is passed in, then max_seqlen must be passed"
+        assert max_seqlen is not None, "If cu_seqlens is passed in, then max_seqlen must be passed"
         total_seqlen, nheads, headdim = x.shape
         batch_p_1 = cu_seqlens.shape[0]
         batch = batch_p_1 - 1
@@ -181,12 +171,8 @@ def apply_rotary(
     assert headdim <= 256, "Only support headdim <= 256"
     assert seqlen_ro >= seqlen, "seqlen_ro must be >= seqlen"
 
-    assert (
-        cos.dtype == sin.dtype
-    ), f"cos and sin must have the same dtype, got {cos.dtype} and {sin.dtype}"
-    assert (
-        x.dtype == cos.dtype
-    ), f"Input and cos/sin must have the same dtype, got {x.dtype} and {cos.dtype}"
+    assert cos.dtype == sin.dtype, f"cos and sin must have the same dtype, got {cos.dtype} and {sin.dtype}"
+    assert x.dtype == cos.dtype, f"Input and cos/sin must have the same dtype, got {x.dtype} and {cos.dtype}"
 
     cos, sin = cos.contiguous(), sin.contiguous()
     if isinstance(seqlen_offsets, torch.Tensor):
@@ -200,11 +186,7 @@ def apply_rotary(
     if rotary_dim < headdim and not inplace:
         output[..., rotary_dim:].copy_(x[..., rotary_dim:])
 
-    BLOCK_K = (
-        32
-        if rotary_dim <= 32
-        else (64 if rotary_dim <= 64 else (128 if rotary_dim <= 128 else 256))
-    )
+    BLOCK_K = 32 if rotary_dim <= 32 else (64 if rotary_dim <= 64 else (128 if rotary_dim <= 128 else 256))
     grid = lambda META: (triton.cdiv(seqlen, META["BLOCK_M"]), batch, nheads)  # noqa
     BLOCK_M = 4 if interleaved else (8 if rotary_dim <= 128 else 4)
 
@@ -221,9 +203,7 @@ def apply_rotary(
             seqlen,  # shapes
             rotary_dim,
             seqlen_ro,
-            output.stride(0)
-            if not is_varlen
-            else 0,  # batch_strides if not varlen else 0
+            output.stride(0) if not is_varlen else 0,  # batch_strides if not varlen else 0
             output.stride(-3),  # seqlen_stride or total_seqlen_stride
             output.stride(-2),  # nheads_stride
             output.stride(-1),  # headdim_stride

@@ -152,16 +152,11 @@ def store_T_kernel(
     """
     pid = tl.program_id(0)
     # Each program handles a filter group
-    store_idx, mask = _get_T_store_idx(
-        CHUNK_SIZE, FILTER_LEN, row_stride, col_stride, DEBUG=DEBUG
-    )
+    store_idx, mask = _get_T_store_idx(CHUNK_SIZE, FILTER_LEN, row_stride, col_stride, DEBUG=DEBUG)
 
     # dT group stride is CHUNK_SIZE * CHUNK_SIZE
     load_offset = pid * CHUNK_SIZE * CHUNK_SIZE
-    load_idx = (
-        tl.arange(0, CHUNK_SIZE)[:, None] * row_stride
-        + tl.arange(0, CHUNK_SIZE)[None, :] * col_stride
-    )
+    load_idx = tl.arange(0, CHUNK_SIZE)[:, None] * row_stride + tl.arange(0, CHUNK_SIZE)[None, :] * col_stride
     T = tl.load(dT_ptr + load_offset + load_idx)
 
     store_offset = pid * FILTER_LEN * CHUNK_SIZE
@@ -229,16 +224,11 @@ def store_Tc_kernel(
     # Each program handles a filter group
     pid = tl.program_id(0)
 
-    store_idx, mask = _get_Tc_store_idx(
-        CHUNK_SIZE, FILTER_LEN, row_stride, col_stride, DEBUG=DEBUG
-    )
+    store_idx, mask = _get_Tc_store_idx(CHUNK_SIZE, FILTER_LEN, row_stride, col_stride, DEBUG=DEBUG)
 
     # Group stride is CHUNK_SIZE * CHUNK_SIZE
     load_offset = pid * CHUNK_SIZE * CHUNK_SIZE
-    load_idx = (
-        tl.arange(0, CHUNK_SIZE)[:, None] * row_stride
-        + tl.arange(0, CHUNK_SIZE)[None, :] * col_stride
-    )
+    load_idx = tl.arange(0, CHUNK_SIZE)[:, None] * row_stride + tl.arange(0, CHUNK_SIZE)[None, :] * col_stride
     Tc = tl.load(dTc_ptr + load_offset + load_idx)
 
     store_offset = pid * FILTER_LEN * CHUNK_SIZE
@@ -335,12 +325,8 @@ def _two_pass_bwd_grouped_kernel_v1(
         tl.arange(0, BLOCK_D)[None, :] * input_col_stride
     )  # not needed, since should be contiguous along feature dim
 
-    for tile_id in tl.range(
-        start_pid, total_tiles, num_programs, num_stages=NUM_PIPELINE_STAGES
-    ):
-        pid_batch, pid_d, pid_chunk = get_program_ids(
-            tile_id, tiles_per_seq, d_tiles_per_chunk, chunks_per_seq
-        )
+    for tile_id in tl.range(start_pid, total_tiles, num_programs, num_stages=NUM_PIPELINE_STAGES):
+        pid_batch, pid_d, pid_chunk = get_program_ids(tile_id, tiles_per_seq, d_tiles_per_chunk, chunks_per_seq)
 
         # First determine offset by batch
         batch_offset = pid_batch * batch_stride
@@ -367,10 +353,7 @@ def _two_pass_bwd_grouped_kernel_v1(
         if LOAD_T:
             T_group_stride = CHUNK_SIZE * CHUNK_SIZE
             T_group_offset = filter_group * T_group_stride
-            T_idx = (
-                tl.arange(0, CHUNK_SIZE)[:, None] * CHUNK_SIZE
-                + tl.arange(0, CHUNK_SIZE)[None, :]
-            )
+            T_idx = tl.arange(0, CHUNK_SIZE)[:, None] * CHUNK_SIZE + tl.arange(0, CHUNK_SIZE)[None, :]
             T = tl.load(T_ptr + T_group_offset + T_idx)
         else:
             T = load_toeplitz(
@@ -446,15 +429,10 @@ def _two_pass_bwd_grouped_kernel_v1(
         tl.store(dB_ptr + store_offsets, dB)
         tl.store(dC_ptr + store_offsets, dC)
 
-        dhdT_idx, dhdT_mask = _get_T_store_idx(
-            CHUNK_SIZE, FILTER_LEN, row_stride=dhdT_row_stride, col_stride=1
-        )
+        dhdT_idx, dhdT_mask = _get_T_store_idx(CHUNK_SIZE, FILTER_LEN, row_stride=dhdT_row_stride, col_stride=1)
 
         dhdT_offsets = (
-            pid_batch * dhdT_batch_stride
-            + pid_chunk * dhdT_chunk_stride
-            + pid_d * dhdT_block_stride
-            + dhdT_idx
+            pid_batch * dhdT_batch_stride + pid_chunk * dhdT_chunk_stride + pid_d * dhdT_block_stride + dhdT_idx
         )
         tl.store(dhdT_ptr + dhdT_offsets, dT, mask=dhdT_mask)
 
@@ -479,14 +457,9 @@ def _two_pass_bwd_grouped_kernel_v1(
                 out_dtype=dy.dtype,
             )
 
-            dhdTc_idx, dhdTc_mask = _get_Tc_store_idx(
-                CHUNK_SIZE, FILTER_LEN, row_stride=dhdT_row_stride, col_stride=1
-            )
+            dhdTc_idx, dhdTc_mask = _get_Tc_store_idx(CHUNK_SIZE, FILTER_LEN, row_stride=dhdT_row_stride, col_stride=1)
             dhdTc_offsets = (
-                pid_batch * dhdT_batch_stride
-                + pid_chunk * dhdT_chunk_stride
-                + pid_d * dhdT_block_stride
-                + dhdTc_idx
+                pid_batch * dhdT_batch_stride + pid_chunk * dhdT_chunk_stride + pid_d * dhdT_block_stride + dhdTc_idx
             )
             tl.store(dhdTc_ptr + dhdTc_offsets, dTc, mask=dhdTc_mask)
 
@@ -602,10 +575,7 @@ def _two_pass_bwd_grouped_kernel_v2(
     if LOAD_T:
         T_group_stride = CHUNK_SIZE * CHUNK_SIZE
         T_group_offset = filter_group * T_group_stride
-        T_idx = (
-            tl.arange(0, CHUNK_SIZE)[:, None] * CHUNK_SIZE
-            + tl.arange(0, CHUNK_SIZE)[None, :]
-        )
+        T_idx = tl.arange(0, CHUNK_SIZE)[:, None] * CHUNK_SIZE + tl.arange(0, CHUNK_SIZE)[None, :]
         T = tl.load(T_ptr + T_group_offset + T_idx)
     else:
         T = load_toeplitz(
@@ -705,15 +675,10 @@ def _two_pass_bwd_grouped_kernel_v2(
         tl.store(dB_ptr + store_offsets, dB)
         tl.store(dC_ptr + store_offsets, dC)
 
-        dhdT_idx, dhdT_mask = _get_T_store_idx(
-            CHUNK_SIZE, FILTER_LEN, row_stride=dhdT_row_stride, col_stride=1
-        )
+        dhdT_idx, dhdT_mask = _get_T_store_idx(CHUNK_SIZE, FILTER_LEN, row_stride=dhdT_row_stride, col_stride=1)
 
         dhdT_offsets = (
-            pid_batch * dhdT_batch_stride
-            + pid_chunk * dhdT_chunk_stride
-            + pid_d * dhdT_block_stride
-            + dhdT_idx
+            pid_batch * dhdT_batch_stride + pid_chunk * dhdT_chunk_stride + pid_d * dhdT_block_stride + dhdT_idx
         )
         tl.store(dhdT_ptr + dhdT_offsets, dT, mask=dhdT_mask)
 
@@ -737,14 +702,9 @@ def _two_pass_bwd_grouped_kernel_v2(
                 out_dtype=dy.dtype,
             )
 
-            dhdTc_idx, dhdTc_mask = _get_Tc_store_idx(
-                CHUNK_SIZE, FILTER_LEN, row_stride=dhdT_row_stride, col_stride=1
-            )
+            dhdTc_idx, dhdTc_mask = _get_Tc_store_idx(CHUNK_SIZE, FILTER_LEN, row_stride=dhdT_row_stride, col_stride=1)
             dhdTc_offsets = (
-                pid_batch * dhdT_batch_stride
-                + pid_chunk * dhdT_chunk_stride
-                + pid_d * dhdT_block_stride
-                + dhdTc_idx
+                pid_batch * dhdT_batch_stride + pid_chunk * dhdT_chunk_stride + pid_d * dhdT_block_stride + dhdTc_idx
             )
             tl.store(dhdTc_ptr + dhdTc_offsets, dTc, mask=dhdTc_mask)
 

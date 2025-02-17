@@ -159,16 +159,11 @@ def store_T_kernel(
     """
     pid = tl.program_id(0)
     # Each program handles a filter group
-    store_idx, mask = _get_T_store_idx(
-        CHUNK_SIZE, FILTER_LEN, row_stride, col_stride, DEBUG=DEBUG
-    )
+    store_idx, mask = _get_T_store_idx(CHUNK_SIZE, FILTER_LEN, row_stride, col_stride, DEBUG=DEBUG)
 
     # dT group stride is CHUNK_SIZE * CHUNK_SIZE
     load_offset = pid * CHUNK_SIZE * CHUNK_SIZE
-    load_idx = (
-        tl.arange(0, CHUNK_SIZE)[:, None] * row_stride
-        + tl.arange(0, CHUNK_SIZE)[None, :] * col_stride
-    )
+    load_idx = tl.arange(0, CHUNK_SIZE)[:, None] * row_stride + tl.arange(0, CHUNK_SIZE)[None, :] * col_stride
     T = tl.load(dT_ptr + load_offset + load_idx)
 
     store_offset = pid * FILTER_LEN * CHUNK_SIZE
@@ -236,16 +231,11 @@ def store_Tc_kernel(
     # Each program handles a filter group
     pid = tl.program_id(0)
 
-    store_idx, mask = _get_Tc_store_idx(
-        CHUNK_SIZE, FILTER_LEN, row_stride, col_stride, DEBUG=DEBUG
-    )
+    store_idx, mask = _get_Tc_store_idx(CHUNK_SIZE, FILTER_LEN, row_stride, col_stride, DEBUG=DEBUG)
 
     # Group stride is CHUNK_SIZE * CHUNK_SIZE
     load_offset = pid * CHUNK_SIZE * CHUNK_SIZE
-    load_idx = (
-        tl.arange(0, CHUNK_SIZE)[:, None] * row_stride
-        + tl.arange(0, CHUNK_SIZE)[None, :] * col_stride
-    )
+    load_idx = tl.arange(0, CHUNK_SIZE)[:, None] * row_stride + tl.arange(0, CHUNK_SIZE)[None, :] * col_stride
     Tc = tl.load(dTc_ptr + load_offset + load_idx)
 
     store_offset = pid * FILTER_LEN * CHUNK_SIZE
@@ -456,15 +446,10 @@ def _two_pass_bwd_grouped_kernel_wgrad(
         # tl.store(dB_ptr + store_offsets, dB)
         # tl.store(dC_ptr + store_offsets, dC)
 
-        dhdT_idx, dhdT_mask = _get_T_store_idx(
-            CHUNK_SIZE, FILTER_LEN, row_stride=dhdT_row_stride, col_stride=1
-        )
+        dhdT_idx, dhdT_mask = _get_T_store_idx(CHUNK_SIZE, FILTER_LEN, row_stride=dhdT_row_stride, col_stride=1)
 
         dhdT_offsets = (
-            pid_batch * dhdT_batch_stride
-            + pid_chunk * dhdT_chunk_stride
-            + pid_d * dhdT_block_stride
-            + dhdT_idx
+            pid_batch * dhdT_batch_stride + pid_chunk * dhdT_chunk_stride + pid_d * dhdT_block_stride + dhdT_idx
         )
         tl.store(dhdT_ptr + dhdT_offsets, dT, mask=dhdT_mask)
 
@@ -483,14 +468,9 @@ def _two_pass_bwd_grouped_kernel_wgrad(
                 out_dtype=dy.dtype,
             )
 
-            dhdTc_idx, dhdTc_mask = _get_Tc_store_idx(
-                CHUNK_SIZE, FILTER_LEN, row_stride=dhdT_row_stride, col_stride=1
-            )
+            dhdTc_idx, dhdTc_mask = _get_Tc_store_idx(CHUNK_SIZE, FILTER_LEN, row_stride=dhdT_row_stride, col_stride=1)
             dhdTc_offsets = (
-                pid_batch * dhdT_batch_stride
-                + pid_chunk * dhdT_chunk_stride
-                + pid_d * dhdT_block_stride
-                + dhdTc_idx
+                pid_batch * dhdT_batch_stride + pid_chunk * dhdT_chunk_stride + pid_d * dhdT_block_stride + dhdTc_idx
             )
             tl.store(dhdTc_ptr + dhdTc_offsets, dTc, mask=dhdTc_mask)
 
@@ -600,10 +580,7 @@ def _two_pass_bwd_grouped_kernel_dgrad(
     if LOAD_T:
         T_group_stride = CHUNK_SIZE * CHUNK_SIZE
         T_group_offset = filter_group * T_group_stride
-        T_idx = (
-            tl.arange(0, CHUNK_SIZE)[:, None] * CHUNK_SIZE
-            + tl.arange(0, CHUNK_SIZE)[None, :]
-        )
+        T_idx = tl.arange(0, CHUNK_SIZE)[:, None] * CHUNK_SIZE + tl.arange(0, CHUNK_SIZE)[None, :]
         T = tl.load(T_ptr + T_group_offset + T_idx)
     else:
         T = load_toeplitz(
@@ -833,12 +810,8 @@ def two_pass_bwd_grouped(
             kernel: triton.runtime.JITFunction = _two_pass_bwd_grouped_kernel_v2
             # kernel: triton.runtime.JITFunction = _two_pass_bwd_grouped_kernel_v2
         elif version == "v3":
-            kernel_dgrad: triton.runtime.JITFunction = (
-                _two_pass_bwd_grouped_kernel_dgrad
-            )
-            kernel_wgrad: triton.runtime.JITFunction = (
-                _two_pass_bwd_grouped_kernel_wgrad
-            )
+            kernel_dgrad: triton.runtime.JITFunction = _two_pass_bwd_grouped_kernel_dgrad
+            kernel_wgrad: triton.runtime.JITFunction = _two_pass_bwd_grouped_kernel_wgrad
         else:
             raise ValueError(f"version {version} not implemented")
 
@@ -1066,20 +1039,16 @@ def two_pass_bwd_grouped(
 
     # Can actually run this with fake tensors (no need for actual kernel tensor args)
     if warmup:
-        compiled_kernel: triton.compiler.CompiledKernel = kernel.warmup(
-            *kernel_args, **kernel_constexprs, grid=(1,)
-        )
+        compiled_kernel: triton.compiler.CompiledKernel = kernel.warmup(*kernel_args, **kernel_constexprs, grid=(1,))
         return compiled_kernel, kernel_args, kernel_constexprs
     else:
         if version == "v1" or version == "v2":
-            compiled_kernel: triton.compiler.CompiledKernel = kernel[grid](
-                *kernel_args, **kernel_constexprs
-            )
+            compiled_kernel: triton.compiler.CompiledKernel = kernel[grid](*kernel_args, **kernel_constexprs)
         else:
             if return_dgrad:
-                compiled_kernel_dgrad: triton.compiler.CompiledKernel = kernel_dgrad[
-                    grid
-                ](*kernel_args_dgrad, **kernel_constexprs, LOAD_BX=LOAD_BX)
+                compiled_kernel_dgrad: triton.compiler.CompiledKernel = kernel_dgrad[grid](
+                    *kernel_args_dgrad, **kernel_constexprs, LOAD_BX=LOAD_BX
+                )
 
         dx = dx.reshape(bs, seqlen, g, dg)
         dB = dB.reshape(bs, seqlen, g, dg)
@@ -1093,13 +1062,9 @@ def two_pass_bwd_grouped(
 
             if return_wgrad:
                 # Run filter grad kernel
-                compiled_kernel_wgrad = kernel_wgrad[grid](
-                    *kernel_args_wgrad, **kernel_constexprs
-                )
+                compiled_kernel_wgrad = kernel_wgrad[grid](*kernel_args_wgrad, **kernel_constexprs)
         # Run second reduction pass
-        dhdT = dhdT.reshape(
-            bs, num_chunks, g, num_blocks_per_filter_group, filter_len, CHUNK_SIZE
-        )
+        dhdT = dhdT.reshape(bs, num_chunks, g, num_blocks_per_filter_group, filter_len, CHUNK_SIZE)
         dhdTc = dhdTc.reshape_as(dhdT)
         dhdT = dhdT.sum([0, 1, 3, 5]).reshape(*filter_shape)
         dhdTc = dhdTc.sum([0, 1, 3, 5]).reshape_as(dhdT)

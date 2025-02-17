@@ -12,8 +12,6 @@ import platform
 from setuptools import setup, find_packages
 import subprocess
 
-import urllib.request
-import urllib.error
 from wheel.bdist_wheel import bdist_wheel as _bdist_wheel
 
 import torch
@@ -48,9 +46,7 @@ def get_platform():
 
 
 def get_cuda_bare_metal_version(cuda_dir):
-    raw_output = subprocess.check_output(
-        [cuda_dir + "/bin/nvcc", "-V"], universal_newlines=True
-    )
+    raw_output = subprocess.check_output([cuda_dir + "/bin/nvcc", "-V"], universal_newlines=True)
     output = raw_output.split()
     release_idx = output.index("release") + 1
     bare_metal_version = parse(output[release_idx].split(",")[0])
@@ -199,12 +195,8 @@ class NinjaBuildExtension(BuildExtension):
             max_num_jobs_cores = max(1, os.cpu_count() // 2)
 
             # calculate the maximum allowed NUM_JOBS based on free memory
-            free_memory_gb = psutil.virtual_memory().available / (
-                1024**3
-            )  # free memory in GB
-            max_num_jobs_memory = int(
-                free_memory_gb / 9
-            )  # each JOB peak memory cost is ~8-9GB when threads = 4
+            free_memory_gb = psutil.virtual_memory().available / (1024**3)  # free memory in GB
+            max_num_jobs_memory = int(free_memory_gb / 9)  # each JOB peak memory cost is ~8-9GB when threads = 4
 
             # pick lower value of jobs based on cores vs memory metric to minimize oom and swap usage during compilation
             max_jobs = max(1, min(max_num_jobs_cores, max_num_jobs_memory))
@@ -228,14 +220,16 @@ setup(
         )
     ),
     ext_modules=ext_modules,
-    cmdclass={
-        "bdist_wheel": CachedWheelsCommand,
-        "build_ext": NinjaBuildExtension,
-    }
-    if ext_modules
-    else {
-        "bdist_wheel": CachedWheelsCommand,
-    },
+    cmdclass=(
+        {
+            "bdist_wheel": CachedWheelsCommand,
+            "build_ext": NinjaBuildExtension,
+        }
+        if ext_modules
+        else {
+            "bdist_wheel": CachedWheelsCommand,
+        }
+    ),
     python_requires=">=3.11",
     install_requires=[
         "torch",

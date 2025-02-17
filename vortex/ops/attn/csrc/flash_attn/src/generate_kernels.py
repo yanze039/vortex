@@ -75,9 +75,7 @@ class Kernel:
 
 def get_all_kernels() -> List[Kernel]:
     for direction in ["fwd", "fwd_split", "bwd"]:
-        for dtype, head_dim, is_causal, sm in itertools.product(
-            DTYPE_MAP.keys(), HEAD_DIMENSIONS, IS_CAUSAL, SM
-        ):
+        for dtype, head_dim, is_causal, sm in itertools.product(DTYPE_MAP.keys(), HEAD_DIMENSIONS, IS_CAUSAL, SM):
             yield Kernel(
                 sm=sm,
                 dtype=dtype,

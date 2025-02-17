@@ -29,9 +29,7 @@ class CausalConv1dFn(torch.autograd.Function):
         )
         ctx.save_for_backward(x, weight, bias, seq_idx, initial_states, activation)
         ctx.return_final_states = return_final_states
-        ctx.return_dinitial_states = (
-            initial_states is not None and initial_states.requires_grad
-        )
+        ctx.return_dinitial_states = initial_states is not None and initial_states.requires_grad
         return out if not return_final_states else (out, final_states_out)
 
     @staticmethod
@@ -43,19 +41,17 @@ class CausalConv1dFn(torch.autograd.Function):
         # The kernel supports passing in a pre-allocated dx (e.g., in case we want to fuse the
         # backward of conv1d with the backward of chunk).
         # Here we just pass in None and dx will be allocated in the C++ code.
-        dx, dweight, dbias, dinitial_states = (
-            local_causal_conv1d_cuda.causal_conv1d_bwd(
-                x,
-                weight,
-                bias,
-                dout,
-                seq_idx,
-                initial_states,
-                dfinal_states,
-                None,
-                ctx.return_dinitial_states,
-                ctx.activation,
-            )
+        dx, dweight, dbias, dinitial_states = local_causal_conv1d_cuda.causal_conv1d_bwd(
+            x,
+            weight,
+            bias,
+            dout,
+            seq_idx,
+            initial_states,
+            dfinal_states,
+            None,
+            ctx.return_dinitial_states,
+            ctx.activation,
         )
         return (
             dx,
@@ -78,9 +74,7 @@ def old_causal_conv1d_fn(
     final_states_out: Optional[torch.Tensor] = None,
     activation: Optional[str] = None,
 ) -> torch.Tensor:
-    return CausalConv1dFn.apply(
-        x, weight, bias, seq_idx, initial_states, final_states_out, activation
-    )
+    return CausalConv1dFn.apply(x, weight, bias, seq_idx, initial_states, final_states_out, activation)
 
 
 @custom_op(
@@ -208,9 +202,7 @@ def causal_conv1d_ref(
         out = F.conv1d(x, weight.unsqueeze(1), bias, padding=0, groups=dim)
     out = out[..., :seqlen]
     if return_final_states:
-        final_states = F.pad(x, (width - 1 - x.shape[-1], 0)).to(
-            dtype_in
-        )  # (batch, dim, width - 1)
+        final_states = F.pad(x, (width - 1 - x.shape[-1], 0)).to(dtype_in)  # (batch, dim, width - 1)
         if final_states_out is not None:
             final_states_out.copy_(final_states)
         else:

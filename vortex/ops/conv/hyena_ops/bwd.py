@@ -120,9 +120,7 @@ def two_pass_bwd_grouped(
 
     # Add assertion for num_warps, CHUNK_SIZE and hl <= 4
     if filter_len < 128 and seqlen > 1024 and CHUNK_SIZE is not None:
-        assert (
-            CHUNK_SIZE >= 128
-        ), f"{__file__}: CHUNK_SIZE must be >= 128 for hl <= 128 and seqlen > 1024"
+        assert CHUNK_SIZE >= 128, f"{__file__}: CHUNK_SIZE must be >= 128 for hl <= 128 and seqlen > 1024"
 
     if BLOCK_D is not None:
         assert dg % BLOCK_D == 0, f"{__file__}: dg must be multiple of BLOCK_D"
@@ -299,14 +297,10 @@ def two_pass_bwd_grouped(
 
     # Can actually run this with fake tensors (no need for actual kernel tensor args)
     if warmup:
-        compiled_kernel: triton.compiler.CompiledKernel = kernel.warmup(
-            *kernel_args, **kernel_constexprs, grid=(1,)
-        )
+        compiled_kernel: triton.compiler.CompiledKernel = kernel.warmup(*kernel_args, **kernel_constexprs, grid=(1,))
         return compiled_kernel, kernel_args, kernel_constexprs
     else:
-        compiled_kernel: triton.compiler.CompiledKernel = kernel[grid](
-            *kernel_args, **kernel_constexprs
-        )
+        compiled_kernel: triton.compiler.CompiledKernel = kernel[grid](*kernel_args, **kernel_constexprs)
         # else:
         #     if return_dgrad:
         #         compiled_kernel_dgrad: triton.compiler.CompiledKernel = kernel_dgrad[grid](
@@ -329,9 +323,7 @@ def two_pass_bwd_grouped(
         #             *kernel_args_wgrad, **kernel_constexprs
         #         )
         # Run second reduction pass
-        dhdT = dhdT.reshape(
-            bs, num_chunks, g, num_blocks_per_filter_group, filter_len, CHUNK_SIZE
-        )
+        dhdT = dhdT.reshape(bs, num_chunks, g, num_blocks_per_filter_group, filter_len, CHUNK_SIZE)
         dhdTc = dhdTc.reshape_as(dhdT)
         dhdT = dhdT.sum([0, 1, 3, 5]).reshape(*filter_shape)
         dhdTc = dhdTc.sum([0, 1, 3, 5]).reshape_as(dhdT)

@@ -10,7 +10,6 @@ from vortex.model.utils import grab_first_if_tuple
 from transformer_engine.pytorch import Linear
 from transformer_engine.common.recipe import Format, DelayedScaling
 import transformer_engine.pytorch as te
-from einops import rearrange
 
 try:
     from hyena_ops import hyena_se_fwd, hyena_mr_fwd, hyena_li_fwd
@@ -20,9 +19,7 @@ except ImportError:
 
 def set_format_recipe():
     fp8_format = Format.HYBRID  # E4M3 during forward pass, E5M2 during backward pass
-    fp8_recipe = DelayedScaling(
-        fp8_format=fp8_format, amax_history_len=16, amax_compute_algo="max"
-    )
+    fp8_recipe = DelayedScaling(fp8_format=fp8_format, amax_history_len=16, amax_compute_algo="max")
     return fp8_format, fp8_recipe
 
 
@@ -144,10 +141,7 @@ class RMSNorm(torch.nn.Module):
         if self.use_flash_rmsnorm:
             return self.rmsnorm_func(x, self.scale, self.eps)
         else:
-            y = x / (
-                x.norm(2, dim=-1, keepdim=True) * self.hidden_size ** (-1.0 / 2)
-                + self.eps
-            )
+            y = x / (x.norm(2, dim=-1, keepdim=True) * self.hidden_size ** (-1.0 / 2) + self.eps)
             return self.scale * y
 
 
@@ -172,9 +166,7 @@ class ParallelGatedMLP(nn.Module):
         self.multiple_of = multiple_of * config.model_parallel_size
 
         inner_size = int(2 * config.hidden_size * 4 / 3)
-        inner_size = self.multiple_of * (
-            (inner_size + self.multiple_of - 1) // self.multiple_of
-        )
+        inner_size = self.multiple_of * ((inner_size + self.multiple_of - 1) // self.multiple_of)
         inner_size = config.get("inner_mlp_size", inner_size)
 
         self.l1 = nn.Linear(
@@ -207,9 +199,7 @@ class Embedding(nn.Module):
 
     def __init__(self, config):
         super().__init__()
-        self.word_embeddings = nn.Embedding(
-            config.vocab_size, config.hidden_size, padding_idx=0
-        )
+        self.word_embeddings = nn.Embedding(config.vocab_size, config.hidden_size, padding_idx=0)
 
     def embed(self, input_ids, position_ids=None, tokentype_ids=None):
         embeddings = self.word_embeddings(input_ids)
@@ -233,10 +223,7 @@ class VocabParallelEmbedding(nn.Embedding):
         if process_group is not None:
             world_size = torch.distributed.get_world_size(process_group)
             if vocab_size % world_size != 0:
-                raise ValueError(
-                    f"vocab_size ({vocab_size}) must be divisible by "
-                    f"world_size ({world_size})"
-                )
+                raise ValueError(f"vocab_size ({vocab_size}) must be divisible by " f"world_size ({world_size})")
             if world_size > 1 and padding_idx is not None:
                 raise RuntimeError("ParallelEmbedding does not support padding_idx")
         else:

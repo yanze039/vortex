@@ -14,18 +14,10 @@ from vortex.model.utils import dotdict, print_rank_0
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Run StripedHyena Model")
-    parser.add_argument(
-        "--config_path", required=True, help="Path to configuration file"
-    )
-    parser.add_argument(
-        "--logits_path", help="Path to dummy savanna logits for numerical accuracy."
-    )
-    parser.add_argument(
-        "--checkpoint_path", default=None, help="Path to checkpoint file"
-    )
-    parser.add_argument(
-        "--prompt_file", default="./prompt.txt", help="Path to prompt file."
-    )
+    parser.add_argument("--config_path", required=True, help="Path to configuration file")
+    parser.add_argument("--logits_path", help="Path to dummy savanna logits for numerical accuracy.")
+    parser.add_argument("--checkpoint_path", default=None, help="Path to checkpoint file")
+    parser.add_argument("--prompt_file", default="./prompt.txt", help="Path to prompt file.")
     parser.add_argument(
         "--cached_generation",
         action="store_true",

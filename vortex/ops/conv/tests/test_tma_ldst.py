@@ -65,9 +65,7 @@ def matmul_kernel_tma(
         tl.device_print("offs_am", m_offset)
         tl.device_print("offs_ak", k_offset)
 
-    x = tl._experimental_descriptor_load(
-        x_desc_ptr, [m_offset, k_offset], [BLOCK_SIZE_M, BLOCK_SIZE_K], tl.float16
-    )
+    x = tl._experimental_descriptor_load(x_desc_ptr, [m_offset, k_offset], [BLOCK_SIZE_M, BLOCK_SIZE_K], tl.float16)
     tl._experimental_descriptor_store(out_desc_ptr, x, [m_offset, k_offset])
 
 
@@ -84,12 +82,8 @@ def test_tma_ldst(bs, seqlen, d, BLOCK_SIZE_M, BLOCK_SIZE_K, dtype, FLUSH):
 
     M, K = bs * seqlen, d
 
-    desc_x = create_2d_tma_descriptor(
-        x.data_ptr(), M, K, BLOCK_SIZE_M, BLOCK_SIZE_K, x.element_size()
-    )
-    desc_out = create_2d_tma_descriptor(
-        out.data_ptr(), M, K, BLOCK_SIZE_M, BLOCK_SIZE_K, out.element_size()
-    )
+    desc_x = create_2d_tma_descriptor(x.data_ptr(), M, K, BLOCK_SIZE_M, BLOCK_SIZE_K, x.element_size())
+    desc_out = create_2d_tma_descriptor(out.data_ptr(), M, K, BLOCK_SIZE_M, BLOCK_SIZE_K, out.element_size())
 
     grid = (triton.cdiv(M, BLOCK_SIZE_M) * triton.cdiv(K, BLOCK_SIZE_K), 1, 1)
     matmul_kernel_tma[grid](

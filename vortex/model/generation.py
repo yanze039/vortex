@@ -10,6 +10,7 @@ from vortex.model.sample import sample
 from vortex.model.tokenizer import CharLevelTokenizer
 from vortex.model.utils import print_rank_0
 
+
 class Generator:
     def __init__(self, model, tokenizer, top_k=50, top_p=0.7, temperature=1):
         self.model = model
@@ -37,21 +38,21 @@ class Generator:
     ) -> tuple[torch.Tensor, torch.Tensor]:
         """
         Generates using the model with optional cached sampling replay.
-        
-        This method enables passing in and returning the `inference_params_dict` for 
+
+        This method enables passing in and returning the `inference_params_dict` for
         replaying cached sampling from a given state, for example for beam search.
-        
+
         Args:
             device: The device to run the model on.
             input_string: The input prompt to generate from.
             input_ids: The input prompt token ids to generate from.
             num_tokens: The number of tokens to generate.
             cached_generation: Whether to use cached generation. Defaults to False.
-            force_prompt_threshold: Number of tokens to prefill in parallel before 
-                switching to prompt forcing. Used to reduce peak memory usage and 
+            force_prompt_threshold: Number of tokens to prefill in parallel before
+                switching to prompt forcing. Used to reduce peak memory usage and
                 support longer prompts. Defaults to None.
-            max_seqlen: Maximum sequence length to generate. Determines the max size 
-                of the cache if larger. Otherwise automatically determined using 
+            max_seqlen: Maximum sequence length to generate. Determines the max size
+                of the cache if larger. Otherwise automatically determined using
                 prompt length + max_tokens. Defaults to None.
             print_generation: Whether to print generated tokens. Defaults to False.
             verbose: Whether to print verbose output. Defaults to False.
@@ -61,7 +62,7 @@ class Generator:
                 replaying cached sampling. Defaults to None.
             token_callback: Optional callback function called after each token is
                 generated. Defaults to None.
-        
+
         Returns:
             dict: The inference parameters dictionary used for generation, which can
                 be used to replay the exact same sampling sequence.
@@ -119,25 +120,25 @@ class Generator:
             cached_generation = True
             prefilled = True
             # Ensure that the cached data is loaded on the correct device.
-            if any(data.device != x.device for data in inference_params_dict['hcl'].fir_state_dict.values()):
-                for key, data in inference_params_dict['mha'].key_value_memory_dict.items():
-                    inference_params_dict['mha'].key_value_memory_dict[key] = data.to(x.device)
-                for key, data in inference_params_dict['hcl'].fir_state_dict.items():
-                    inference_params_dict['hcl'].fir_state_dict[key] = data.to(x.device)
-                for key, data in inference_params_dict['hcl'].state_dict.items():
-                    inference_params_dict['hcl'].state_dict[key] = data.to(x.device)
-                for key, data in inference_params_dict['hcm'].fir_inner_state_dict.items():
-                    inference_params_dict['hcm'].fir_inner_state_dict[key] = data.to(x.device)
-                for key, data in inference_params_dict['hcm'].fir_state_dict.items():
-                    inference_params_dict['hcm'].fir_state_dict[key] = data.to(x.device)
-                for key, data in inference_params_dict['hcm'].state_dict.items():
-                    inference_params_dict['hcm'].state_dict[key] = data.to(x.device)
-                for key, data in inference_params_dict['hcs'].fir_state_dict.items():
-                    inference_params_dict['hcs'].fir_state_dict[key] = data.to(x.device)
-                for key, data in inference_params_dict['hcs'].fir_inner_state_dict.items():
-                    inference_params_dict['hcs'].fir_inner_state_dict[key] = data.to(x.device)
-                for key, data in inference_params_dict['hcs'].state_dict.items():
-                    inference_params_dict['hcs'].state_dict[key] = data.to(x.device)
+            if any(data.device != x.device for data in inference_params_dict["hcl"].fir_state_dict.values()):
+                for key, data in inference_params_dict["mha"].key_value_memory_dict.items():
+                    inference_params_dict["mha"].key_value_memory_dict[key] = data.to(x.device)
+                for key, data in inference_params_dict["hcl"].fir_state_dict.items():
+                    inference_params_dict["hcl"].fir_state_dict[key] = data.to(x.device)
+                for key, data in inference_params_dict["hcl"].state_dict.items():
+                    inference_params_dict["hcl"].state_dict[key] = data.to(x.device)
+                for key, data in inference_params_dict["hcm"].fir_inner_state_dict.items():
+                    inference_params_dict["hcm"].fir_inner_state_dict[key] = data.to(x.device)
+                for key, data in inference_params_dict["hcm"].fir_state_dict.items():
+                    inference_params_dict["hcm"].fir_state_dict[key] = data.to(x.device)
+                for key, data in inference_params_dict["hcm"].state_dict.items():
+                    inference_params_dict["hcm"].state_dict[key] = data.to(x.device)
+                for key, data in inference_params_dict["hcs"].fir_state_dict.items():
+                    inference_params_dict["hcs"].fir_state_dict[key] = data.to(x.device)
+                for key, data in inference_params_dict["hcs"].fir_inner_state_dict.items():
+                    inference_params_dict["hcs"].fir_inner_state_dict[key] = data.to(x.device)
+                for key, data in inference_params_dict["hcs"].state_dict.items():
+                    inference_params_dict["hcs"].state_dict[key] = data.to(x.device)
             inference_params_dict["mha"].max_batch_size = batch_size
         elif cached_generation:
             inference_params_dict = self.model.initialize_inference_params(max_seqlen=tot_length)
@@ -163,22 +164,22 @@ class Generator:
             # prefill then process only the last token
             if post_prefill:
                 x = x[:, -1:]
-                seqlen_offset = inference_params_dict['mha'].seqlen_offset
+                seqlen_offset = inference_params_dict["mha"].seqlen_offset
 
                 if seqlen_offset == 0:
                     if prompt_forcing:
                         seqlen_offset = force_prompt_threshold
                     else:
                         seqlen_offset = input.shape[-1]
-                    inference_params_dict['mha'].seqlen_offset = seqlen_offset
-                    inference_params_dict['hcl'].seqlen_offset = seqlen_offset
-                    inference_params_dict['hcm'].seqlen_offset = seqlen_offset
-                    inference_params_dict['hcs'].seqlen_offset = seqlen_offset
+                    inference_params_dict["mha"].seqlen_offset = seqlen_offset
+                    inference_params_dict["hcl"].seqlen_offset = seqlen_offset
+                    inference_params_dict["hcm"].seqlen_offset = seqlen_offset
+                    inference_params_dict["hcs"].seqlen_offset = seqlen_offset
                 else:
-                    inference_params_dict['mha'].seqlen_offset += 1
-                    inference_params_dict['hcl'].seqlen_offset += 1
-                    inference_params_dict['hcm'].seqlen_offset += 1
-                    inference_params_dict['hcs'].seqlen_offset += 1
+                    inference_params_dict["mha"].seqlen_offset += 1
+                    inference_params_dict["hcl"].seqlen_offset += 1
+                    inference_params_dict["hcm"].seqlen_offset += 1
+                    inference_params_dict["hcs"].seqlen_offset += 1
 
             # do forward pass with no gradient
             with torch.inference_mode():
@@ -202,13 +203,13 @@ class Generator:
                 )
 
             if stop_at_eos and (generation[0, -1:] == eos_token_ids).all():
-                print('Stopping generation at EOS')
-
+                print("Stopping generation at EOS")
 
             if print_generation and verbose and batch_size == 1:
                 print(
-                    f'{self.tokenizer.detokenize([new_idx.item()])}',
-                    end=' ', flush=True,
+                    f"{self.tokenizer.detokenize([new_idx.item()])}",
+                    end=" ",
+                    flush=True,
                 )
 
             if prompt_forcing:
@@ -232,10 +233,10 @@ class Generator:
                     y = y.split(until)[0]
                     break
 
-            print(f'\nInput: {input_string}, Output: {y}')
+            print(f"\nInput: {input_string}, Output: {y}")
 
             mem_end = torch.cuda.memory_allocated(device=x.device) / 1e9
-            print(f'Memory after generation: {mem_end} GB')
+            print(f"Memory after generation: {mem_end} GB")
 
         return generation[:, : i + 1], scores[:, : i + 1], inference_params_dict
 
@@ -245,11 +246,9 @@ def logits_to_logprobs(logits: torch.Tensor, tokens: torch.Tensor) -> torch.Tens
     probs = torch.log_softmax(logits, dim=-1)
     return torch.gather(probs, -1, tokens.unsqueeze(-1)).squeeze(-1)
 
+
 def prepare_batch(
-    seqs: list[str],
-    tokenizer: CharLevelTokenizer,
-    prepend_bos: bool = False,
-    device: str = 'cuda:0'
+    seqs: list[str], tokenizer: CharLevelTokenizer, prepend_bos: bool = False, device: str = "cuda:0"
 ) -> tuple[torch.Tensor, list[int]]:
     """Prepare a batch of sequences for the model."""
     if prepend_bos:
@@ -263,15 +262,17 @@ def prepare_batch(
     batch = torch.zeros((len(tokens), max_len), dtype=torch.long)
 
     for i, t in enumerate(tokens):
-        batch[i, :len(t)] = t
+        batch[i, : len(t)] = t
 
     return batch.to(device), [len(t) for t in tokens]
 
+
 @dataclass(kw_only=True)
 class GenerationOutput:
-    sequences:     list[str]
-    logits:        list[torch.Tensor]
+    sequences: list[str]
+    logits: list[torch.Tensor]
     logprobs_mean: list[float]
+
 
 def generate(
     *,
@@ -279,15 +280,15 @@ def generate(
     model,
     tokenizer: CharLevelTokenizer,
     n_tokens: int = 100,
-    temperature: float = 0.,
+    temperature: float = 0.0,
     top_k: int = 1,
-    top_p: float = 1.,
+    top_p: float = 1.0,
     batched: bool = True,
     prepend_bos: bool = False,
     force_prompt_threshold: int = 1000,
     cached_generation: bool = True,
     verbose: int = 1,
-    device: str = 'cuda:0',
+    device: str = "cuda:0",
     **kwargs,
 ) -> GenerationOutput:
     """
@@ -317,7 +318,7 @@ def generate(
             )[0]
         ]
     else:
-        sys.stderr.write('WARNING: Batched generation is turned off.\n')
+        sys.stderr.write("WARNING: Batched generation is turned off.\n")
         input_ids_list = [
             prepare_batch(
                 [prompt_seq],
@@ -345,9 +346,9 @@ def generate(
         )
 
         if verbose > 1:
-            print('input_ids.shape', input_ids.shape)
-            print('output_ids.shape', output_ids.shape)
-            print('logits.shape', logits.shape)
+            print("input_ids.shape", input_ids.shape)
+            print("output_ids.shape", output_ids.shape)
+            print("logits.shape", logits.shape)
 
         generated_seqs_batch = list(tokenizer.detokenize_batch(output_ids))
         assert len(generated_seqs_batch) == batch_size

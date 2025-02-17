@@ -61,9 +61,7 @@ def correction_toeplitz_from_empty(T, h):
     return T
 
 
-def benchmark_forward(
-    fn, *inputs, repeats=30, desc="", amp=False, amp_dtype=torch.float16, **kwinputs
-):
+def benchmark_forward(fn, *inputs, repeats=30, desc="", amp=False, amp_dtype=torch.float16, **kwinputs):
     def amp_wrapper(*inputs, **kwinputs):
         with torch.autocast(device_type="cuda", dtype=amp_dtype, enabled=amp):
             fn(*inputs, **kwinputs)

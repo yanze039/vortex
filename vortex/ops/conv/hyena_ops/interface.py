@@ -3,18 +3,12 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-import triton
-import triton.language as tl
 
-import warnings
 import logging
-from triton.runtime import Config
 from dataclasses import dataclass
-from typing import Optional
 from einops import rearrange
 from .bwd import two_pass_bwd_grouped
 from .fwd import two_pass_fwd_grouped, two_pass_fwd_grouped_refactor
-from .fwd_kernels import get_autotune_configs
 
 logger = logging.getLogger(__name__)
 from hyena_ops.kernel_utils import (
@@ -83,11 +77,7 @@ class TwoPassChunkedGateConvGate(torch.autograd.Function):
             raise NotImplementedError("Skip TMA for now")
             # kernel = two_pass_fwd_grouped_tma
         else:
-            kernel = (
-                two_pass_fwd_grouped_refactor
-                if use_refactor_path
-                else two_pass_fwd_grouped
-            )
+            kernel = two_pass_fwd_grouped_refactor if use_refactor_path else two_pass_fwd_grouped
 
         x = x if x.is_contiguous() else x.contiguous()
         B = B if B.is_contiguous() else B.contiguous()
@@ -191,17 +181,11 @@ def two_pass_chunked_gate_conv_gate(
     fwd_kernel_cfg: FwdKernelConfig = None,
     bwd_kernel_cfg: BwdKernelConfig = None,
 ):
-    assert autotune or (
-        fwd_kernel_cfg is not None
-    ), "Must specify fwd_kernel_cfg if not autotuning"
+    assert autotune or (fwd_kernel_cfg is not None), "Must specify fwd_kernel_cfg if not autotuning"
     if autotune and (fwd_kernel_cfg is not None):
-        warnings.warn(
-            "WARNING: Both autotune and fwd_kernel_cfg specified, using fwd_kernel_cfg"
-        )
+        warnings.warn("WARNING: Both autotune and fwd_kernel_cfg specified, using fwd_kernel_cfg")
         autotune = False
-    assert (
-        bwd_kernel_cfg is not None
-    ), "Must specify bwd_kernel_cfg, autotune not supported for bwd pass"
+    assert bwd_kernel_cfg is not None, "Must specify bwd_kernel_cfg, autotune not supported for bwd pass"
     if return_toeplitz:
         # Check that fwd returns toeplitz and that bwd uses load_toeplitz
         if fwd_kernel_cfg is not None:
@@ -308,9 +292,7 @@ def reshape_inputs(x, k, q, num_groups, input_layout, inner_layout):
 
     elif input_layout == "blgdg":
         B, L, G, DG = x.shape
-        assert (
-            G == num_groups
-        ), "number of groups in feature groups and filter must match"
+        assert G == num_groups, "number of groups in feature groups and filter must match"
         if inner_layout == "bdl":
             x = rearrange(x, "b l g dg -> b (g dg) l", g=num_groups)
             k = rearrange(k, "b l g dg -> b (g dg) l", g=num_groups)
@@ -325,9 +307,7 @@ def reshape_inputs(x, k, q, num_groups, input_layout, inner_layout):
             raise NotImplementedError("inner_layout must be bdl or bgdgl")
     elif input_layout == "bgdgl":
         B, G, D, L = x.shape
-        assert (
-            G == num_groups
-        ), "number of groups in feature groups and filter must match"
+        assert G == num_groups, "number of groups in feature groups and filter must match"
         if inner_layout == "bdl":
             x = rearrange(x, "b g d l -> b (g d) l", g=num_groups)
             B = rearrange(B, "b g d l -> b (g d) l", g=num_groups)
@@ -414,9 +394,7 @@ def inner_hyena_se_ref(
         y = reshape_outputs(y, num_groups, output_layout, inner_layout)
         return y
     else:
-        raise NotImplementedError(
-            f"Reference cgcg kernel path not integrated in hyena_se_ref"
-        )
+        raise NotImplementedError("Reference cgcg kernel path not integrated in hyena_se_ref")
 
 
 def inner_hyena_se(
@@ -516,9 +494,7 @@ class HyenaSEFunc(torch.autograd.Function):
 
         Bx = B * x
         if use_fast_causal_conv1d:
-            y = old_causal_conv1d_fn(
-                Bx, h, bias=bias, apply_gated_bias=apply_gated_bias
-            )
+            y = old_causal_conv1d_fn(Bx, h, bias=bias, apply_gated_bias=apply_gated_bias)
         else:
             y = causal_conv1d_ref(
                 Bx,
@@ -544,11 +520,7 @@ class CausalConv1D(nn.Conv1d):
         self.filter_len = self.weight.shape[-1]
         if gemm_conv1d:
             # TODO: generalize to different sizes
-            toeplitz_matrix = (
-                toeplitz(self.weight.squeeze(1), size=256)
-                .to(self.weight.device)
-                .to(self.weight.dtype)
-            )
+            toeplitz_matrix = toeplitz(self.weight.squeeze(1), size=256).to(self.weight.device).to(self.weight.dtype)
             self.register_buffer("toeplitz_matrix", toeplitz_matrix)
 
     def forward(self, input):
@@ -557,19 +529,13 @@ class CausalConv1D(nn.Conv1d):
             # only works with B=1
             # self.T is a (d, l, l) tensor
             B, D, L = input.shape
-            custom_output = torch.bmm(
-                self.toeplitz_matrix, input.reshape(-1, L, 1)
-            ).reshape(B, D, L)
+            custom_output = torch.bmm(self.toeplitz_matrix, input.reshape(-1, L, 1)).reshape(B, D, L)
         else:
             w = rearrange(self.weight, "d 1 w -> d w")
             if self.filter_len <= 4:
-                custom_output = old_causal_conv1d_fn(
-                    input, w, bias=self.bias, activation=None, seq_idx=None
-                )
+                custom_output = old_causal_conv1d_fn(input, w, bias=self.bias, activation=None, seq_idx=None)
             else:
-                custom_output = causal_conv1d_ref(
-                    input, w, bias=self.bias, activation=None, seq_idx=None
-                )
+                custom_output = causal_conv1d_ref(input, w, bias=self.bias, activation=None, seq_idx=None)
         return custom_output
 
 
@@ -596,13 +562,9 @@ class HyenaFeaturizer(nn.Module):
         x = self.feat_dense(x)
         x = x.transpose(1, 2)
         if old_causal_conv1d_fn is not None:
-            x = old_causal_conv1d_fn(
-                x, self.feat_conv_filter, bias=None, activation=None, seq_idx=None
-            )
+            x = old_causal_conv1d_fn(x, self.feat_conv_filter, bias=None, activation=None, seq_idx=None)
         else:
-            x = self.causal_conv1d_ref(
-                x, self.feat_conv_filter, bias=None, activation=None, seq_idx=None
-            )
+            x = self.causal_conv1d_ref(x, self.feat_conv_filter, bias=None, activation=None, seq_idx=None)
         return x
 
 
@@ -650,9 +612,7 @@ class OldHyenaSE(nn.Module):
             return_state: (bool): whether to return a state
         """
         super().__init__()
-        assert (
-            d_model % num_heads == 0
-        ), f"Model dimension {d_model} must be divisible by num heads {num_heads}"
+        assert d_model % num_heads == 0, f"Model dimension {d_model} must be divisible by num heads {num_heads}"
         assert (
             l_max % num_blocks == 0
         ), f"Maximum signal length {l_max} must be divisible by block dimension {num_blocks}"
@@ -684,13 +644,10 @@ class OldHyenaSE(nn.Module):
         "Initializes input and output projections (over the width dimension)"
         linear_cls = nn.Linear
         self.out_proj = linear_cls(self.d_model * inner_factor, self.d_model, bias=True)
-        self.in_proj = linear_cls(
-            self.d_model, (self.order + 1) * self.d_model, bias=True
-        )
+        self.in_proj = linear_cls(self.d_model, (self.order + 1) * self.d_model, bias=True)
         if self.post_order_ffn:
             self.ord_proj_w = nn.Parameter(
-                torch.randn(self.order, self.num_heads, self.num_heads)
-                / math.sqrt(self.head_dim)
+                torch.randn(self.order, self.num_heads, self.num_heads) / math.sqrt(self.head_dim)
             )
 
     def setup_filters(self, filter_cls, filter_args):

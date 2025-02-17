@@ -29,14 +29,13 @@ ifneq ($(VIRTUAL_ENV),)
     ENV_ACTIVE := UV        # Using a UV/venv environment
 else ifdef CONDA_PREFIX
     $(info Detected Conda environment "$(CONDA_DEFAULT_ENV)")
+	ifeq ($(CONDA_DEFAULT_ENV), base)
+		$(info Base Conda environment is active; please create a new environment for vortex)
+		exit 1
+	endif
     ENV_ACTIVE := CONDA     # Using a Conda environment
 else
     ENV_ACTIVE := NONE      # No environment active
-endif
-
-ifeq ($(CONDA_DEFAULT_ENV), base)
-    $(info Base Conda environment detected; skipping new environment setup)
-    ENV_ACTIVE := BASE_CONDA
 endif
 
 _setup_missing_env:
@@ -56,12 +55,10 @@ endif
 
 
 setup-full: submodules
-	$(UV) venv
-	. $(VENV_BIN)/activate
-	$(UV) pip install ninja cmake pybind11 numpy psutil
-	$(UV) pip install -e .
-	$(UV) pip install transformer_engine[pytorch] --no-build-isolation 
-	cd vortex/ops/attn && MAX_JOBS=32 $(UV) pip install -v -e  . --no-build-isolation
+	pip install ninja cmake pybind11 numpy psutil
+	pip install -e .
+	pip install transformer_engine[pytorch] --no-build-isolation 
+	cd vortex/ops/attn && MAX_JOBS=32 pip install -v -e  . --no-build-isolation
 
 setup-vortex-ops: submodules _check_env_enabled _setup_missing_env
 	pip install ninja cmake pybind11 numpy psutil
@@ -84,6 +81,6 @@ lint:
 
 format:
 	ruff check --fix .
-	black .
+	black -l 120 .
 
 rebuild: clean setup 

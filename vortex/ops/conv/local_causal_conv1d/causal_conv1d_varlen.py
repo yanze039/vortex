@@ -33,17 +33,13 @@ def _causal_conv1d_varlen_states(
     )
     rows_states = state_len - (tl.program_id(1) + 1) * BLOCK_M + tl.arange(0, BLOCK_M)
     tl.store(
-        STATES
-        + rows_states[:, None] * stride_states_seqlen
-        + cols[None, :] * stride_states_dim,
+        STATES + rows_states[:, None] * stride_states_seqlen + cols[None, :] * stride_states_dim,
         x,
         mask=(rows_states[:, None] >= 0) & (cols[None, :] < dim),
     )
 
 
-def causal_conv1d_varlen_states(
-    x: Tensor, cu_seqlens: Tensor, state_len: int
-) -> Tensor:
+def causal_conv1d_varlen_states(x: Tensor, cu_seqlens: Tensor, state_len: int) -> Tensor:
     """
     Forward pass only, does not support backward pass.
     Parameters:
@@ -57,9 +53,7 @@ def causal_conv1d_varlen_states(
     _, dim = x.shape
     batch = cu_seqlens.shape[0] - 1
     cu_seqlens = cu_seqlens.contiguous()
-    states = torch.empty(
-        batch, state_len, dim, dtype=x.dtype, device=x.device
-    ).transpose(1, 2)
+    states = torch.empty(batch, state_len, dim, dtype=x.dtype, device=x.device).transpose(1, 2)
     BLOCK_M = min(triton.next_power_of_2(state_len), 16)
     BLOCK_N = min(triton.next_power_of_2(dim), 256)
     grid = (triton.cdiv(dim, BLOCK_N), triton.cdiv(state_len, BLOCK_M), batch)
@@ -81,9 +75,7 @@ def causal_conv1d_varlen_states(
     return states
 
 
-def causal_conv1d_varlen_states_ref(
-    x: Tensor, cu_seqlens: Tensor, state_len: int
-) -> Tensor:
+def causal_conv1d_varlen_states_ref(x: Tensor, cu_seqlens: Tensor, state_len: int) -> Tensor:
     """
     Forward pass only, does not support backward pass.
     Parameters:
@@ -97,9 +89,7 @@ def causal_conv1d_varlen_states_ref(
     _, dim = x.shape
     batch = cu_seqlens.shape[0] - 1
     cu_seqlens = cu_seqlens.contiguous()
-    states = torch.zeros(
-        batch, state_len, dim, dtype=x.dtype, device=x.device
-    ).transpose(1, 2)
+    states = torch.zeros(batch, state_len, dim, dtype=x.dtype, device=x.device).transpose(1, 2)
     for i in range(batch):
         end_idx = cu_seqlens[i + 1]
         start_idx = torch.maximum(cu_seqlens[i], end_idx - state_len)

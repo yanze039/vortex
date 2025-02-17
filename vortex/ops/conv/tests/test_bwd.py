@@ -319,9 +319,7 @@ def test_two_pass_fwd_bwd(
         return_bx_lag=LOAD_BX_LAG,
         **kernel_config,
     )
-    _, _, _, y2_ref, _ = gcg_two_pass_chunked_fwd_corrected(
-        x, B, C, h, gl=CHUNK_SIZE, return_intermediates=True
-    )
+    _, _, _, y2_ref, _ = gcg_two_pass_chunked_fwd_corrected(x, B, C, h, gl=CHUNK_SIZE, return_intermediates=True)
 
     if load_toeplitz:
         h_ = h.flip(-1)[:, 0]

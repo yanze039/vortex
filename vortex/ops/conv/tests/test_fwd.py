@@ -115,9 +115,7 @@ def test_two_pass_fwd(
         T_hat_ref = correction_toeplitz(h_, size=CHUNK_SIZE)
 
     if return_y2:
-        _, _, _, y2_ref, _ = gcg_two_pass_chunked_fwd_corrected(
-            x, B, C, h, gl=CHUNK_SIZE, return_intermediates=True
-        )
+        _, _, _, y2_ref, _ = gcg_two_pass_chunked_fwd_corrected(x, B, C, h, gl=CHUNK_SIZE, return_intermediates=True)
 
     kernel_config = {
         "CHUNK_SIZE": CHUNK_SIZE,

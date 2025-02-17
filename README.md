@@ -30,23 +30,13 @@ Note that this is does not install all dependencies required to run autoregressi
 
 Refer to the [Dockerfile](Dockerfile) for a sample build.
 
-### Using uv
+### Using conda, venv or uv
 
 To run e2e installation in a uv environment, use the following command:
 ```bash
 make setup-full
 ```
 Note that the `setup-full` step will compile various CUDA kernels, which usually takes at most several minutes. It may be necessary to customize CUDA header and library paths in `Makefile`.  
-
-After installation, use 
-```bash
-source .venv/bin/activate
-```
-to activate the environment.
-
-### Using conda
-
-Manually follow the `make setup-full` steps in your preferred conda environment.
 
 ## Inference Quickstart
 

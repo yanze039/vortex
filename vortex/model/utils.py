@@ -4,9 +4,7 @@ import logging
 log = logging.getLogger(__name__)
 
 
-def get_dim_for_local_rank(
-    dim: int, world_size: int, local_rank: int, multiple_of: int = 1
-) -> int:
+def get_dim_for_local_rank(dim: int, world_size: int, local_rank: int, multiple_of: int = 1) -> int:
     """Get the dim for the local rank derived from splitting dim on world_size processes.
 
     The split may not be even across the world_size processes.
@@ -86,6 +84,7 @@ def column_split(x, num_heads, head_size):
         )
         return x2, x1, v
 
+
 def load_checkpoint(model, checkpoint_path):
     if checkpoint_path is None:
         log.warning("Using random weights (dry-run)")
@@ -96,6 +95,7 @@ def load_checkpoint(model, checkpoint_path):
     # in Transformer Engine layers' _extra keys. If not, weights_only=True
     # will not be happy.
     import io
+
     torch.serialization.add_safe_globals([io.BytesIO])
 
     with torch.inference_mode():
@@ -121,20 +121,22 @@ def load_checkpoint(model, checkpoint_path):
 
         model.to_bfloat16_except_pr_lc()
 
+
 def move_to_device(module, device):
     """Recursively moves all parameters and buffers to the specified device."""
     for child in module.children():
         move_to_device(child, device)
-    
+
     for param in module.parameters(recurse=False):
         if param.device != device:
             param.data = param.data.to(device)
-    
+
     for buf in module.buffers(recurse=False):
         if buf.device != device:
             buf.data = buf.data.to(device)
-    
+
     module.to(device)
+
 
 def fixup_fp8_extra_states(module):
     """Recursively fixes device location of TE's Linear fp8 extra states."""
@@ -145,6 +147,7 @@ def fixup_fp8_extra_states(module):
     # trouble when the layer is moved to another GPU. Instead, this is how
     # TE Linear should load extra_state: using parameters' device.
     torch_load = torch.load
+
     def overriden_load(state, map_location):
         device = next(module.parameters()).device
         return torch_load(state, map_location=device)
@@ -152,27 +155,33 @@ def fixup_fp8_extra_states(module):
     if hasattr(module, "fp8_meta"):
         log.debug(f"Reloading fp8 extra state to a proper device for {module}")
         from unittest.mock import patch
-        with patch('torch.load', new=overriden_load):
+
+        with patch("torch.load", new=overriden_load):
             module.set_extra_state(module.get_extra_state())
+
 
 def fixup_te_workspace():
     """TE uses single workspace tensor for all calls, disregarding that inputs
     may be on separate GPUs. This patches TE's Linear module to use per-device
     workspaces."""
     from functools import lru_cache
+
     @lru_cache
     def te_cublas_get_workspace_per_device(device):
         log.info(f"Fixup applied: Allocating cublas workspace for {device=}")
         import transformer_engine.pytorch.module.base as tebase
+
         with torch.cuda.device(device):
-            tebase._cublas_workspace = None # Force get_workspace() to reallocate tensor
+            tebase._cublas_workspace = None  # Force get_workspace() to reallocate tensor
             return tebase.get_workspace()
 
     def get_workspace():
         return te_cublas_get_workspace_per_device(torch.cuda.current_device())
 
     import transformer_engine.pytorch.module.linear as telinear
+
     telinear.get_workspace = get_workspace
+
 
 def get_init_from_string(init_str):
     if type(init_str) == str:
@@ -205,9 +214,7 @@ class dotdict(dict):
 
 def ensure_divisibility(numerator, denominator):
     """Ensure that numerator is divisible by the denominator."""
-    assert numerator % denominator == 0, "{} is not divisible by {}".format(
-        numerator, denominator
-    )
+    assert numerator % denominator == 0, "{} is not divisible by {}".format(numerator, denominator)
 
 
 def divide(numerator, denominator):
@@ -232,9 +239,7 @@ class VocabUtility:
     partition: Note that indices in [first, last]"""
 
     @staticmethod
-    def vocab_range_from_per_partition_vocab_size(
-        per_partition_vocab_size, rank, world_size
-    ):
+    def vocab_range_from_per_partition_vocab_size(per_partition_vocab_size, rank, world_size):
         index_f = rank * per_partition_vocab_size
         index_l = index_f + per_partition_vocab_size
         return index_f, index_l
@@ -242,6 +247,4 @@ class VocabUtility:
     @staticmethod
     def vocab_range_from_global_vocab_size(global_vocab_size, rank, world_size):
         per_partition_vocab_size = divide(global_vocab_size, world_size)
-        return VocabUtility.vocab_range_from_per_partition_vocab_size(
-            per_partition_vocab_size, rank, world_size
-        )
+        return VocabUtility.vocab_range_from_per_partition_vocab_size(per_partition_vocab_size, rank, world_size)

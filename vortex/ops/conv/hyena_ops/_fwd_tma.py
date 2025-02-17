@@ -87,9 +87,7 @@ def _two_pass_fwd_grouped_tma_kernel(
     chunks_per_batch = num_tiles_m
     tiles_per_filter_group = dg // BLOCK_D
 
-    for tile_id in tl.range(
-        pid, total_tiles, num_programs, num_stages=NUM_PIPELINE_STAGES
-    ):
+    for tile_id in tl.range(pid, total_tiles, num_programs, num_stages=NUM_PIPELINE_STAGES):
         pid_batch, pid_chunk, pid_d, pid_filter_group = get_program_order(
             tile_id,
             num_tiles_batch,
@@ -119,12 +117,8 @@ def _two_pass_fwd_grouped_tma_kernel(
             tl.device_print("offset_m", offset_m)
             tl.device_print("offset_k", offset_k)
 
-        x = tl._experimental_descriptor_load(
-            x_desc, [offset_m, offset_k], [CHUNK_SIZE, BLOCK_D], DTYPE.value
-        )
-        B = tl._experimental_descriptor_load(
-            B_desc, [offset_m, offset_k], [CHUNK_SIZE, BLOCK_D], DTYPE.value
-        )
+        x = tl._experimental_descriptor_load(x_desc, [offset_m, offset_k], [CHUNK_SIZE, BLOCK_D], DTYPE.value)
+        B = tl._experimental_descriptor_load(B_desc, [offset_m, offset_k], [CHUNK_SIZE, BLOCK_D], DTYPE.value)
 
         Bx = B * x
         T = load_toeplitz(
@@ -197,9 +191,7 @@ def _two_pass_fwd_grouped_tma_kernel(
         if RETURN_Y2:
             tl._experimental_descriptor_store(y2_desc, y, [offset_m, offset_k])
 
-        C = tl._experimental_descriptor_load(
-            C_desc, [offset_m, offset_k], [CHUNK_SIZE, BLOCK_D], DTYPE.value
-        )
+        C = tl._experimental_descriptor_load(C_desc, [offset_m, offset_k], [CHUNK_SIZE, BLOCK_D], DTYPE.value)
         y *= C
 
         tl._experimental_descriptor_store(y_desc, y, [offset_m, offset_k])
@@ -269,23 +261,15 @@ def two_pass_fwd_grouped_tma(
 
     M, K = bs * seqlen, d
 
-    desc_x = create_2d_tma_descriptor(
-        x.data_ptr(), M, K, CHUNK_SIZE, BLOCK_D, x.element_size()
-    )
+    desc_x = create_2d_tma_descriptor(x.data_ptr(), M, K, CHUNK_SIZE, BLOCK_D, x.element_size())
 
-    desc_B = create_2d_tma_descriptor(
-        B.data_ptr(), M, K, CHUNK_SIZE, BLOCK_D, B.element_size()
-    )
-    desc_C = create_2d_tma_descriptor(
-        C.data_ptr(), M, K, CHUNK_SIZE, BLOCK_D, C.element_size()
-    )
+    desc_B = create_2d_tma_descriptor(B.data_ptr(), M, K, CHUNK_SIZE, BLOCK_D, B.element_size())
+    desc_C = create_2d_tma_descriptor(C.data_ptr(), M, K, CHUNK_SIZE, BLOCK_D, C.element_size())
 
     if y is None:
         y = torch.zeros_like(x)
 
-    desc_y = create_2d_tma_descriptor(
-        y.data_ptr(), M, K, CHUNK_SIZE, BLOCK_D, y.element_size()
-    )
+    desc_y = create_2d_tma_descriptor(y.data_ptr(), M, K, CHUNK_SIZE, BLOCK_D, y.element_size())
     # Reshape h to a 2-D tensor
     # TODO: remove?
     h = h.reshape(g, filter_len)
@@ -338,17 +322,13 @@ def two_pass_fwd_grouped_tma(
     # For backwards
     if return_y2:
         y2 = torch.empty_like(x)
-        desc_y2 = create_2d_tma_descriptor(
-            y2.data_ptr(), M, K, CHUNK_SIZE, BLOCK_D, y2.element_size()
-        )
+        desc_y2 = create_2d_tma_descriptor(y2.data_ptr(), M, K, CHUNK_SIZE, BLOCK_D, y2.element_size())
     else:
         y2 = None
         desc_y2 = None
 
     if return_toeplitz:
-        assert (
-            CHUNK_SIZE is not None
-        ), "CHUNK_SIZE must be specified for return_toeplitz"
+        assert CHUNK_SIZE is not None, "CHUNK_SIZE must be specified for return_toeplitz"
         # NOTE: Need to initialize T_hat as zeros, since not all chunks need correction term
         T = torch.zeros(g, CHUNK_SIZE, CHUNK_SIZE, device=x.device, dtype=x.dtype)
         T_hat = torch.zeros_like(T)
@@ -360,9 +340,7 @@ def two_pass_fwd_grouped_tma(
     if verbose:
         #  print(f"{x.shape=}, {B.shape=}, {C.shape=}, {h.shape=}, {y.shape=}")
         print(f"{bs=} {seqlen=} {g=} {dg=} {filter_len=}")
-        print(
-            f"{CHUNK_SIZE=}, {BLOCK_D=}, {num_warps=}, {NUM_PIPELINE_STAGES=} {DTYPE=}"
-        )
+        print(f"{CHUNK_SIZE=}, {BLOCK_D=}, {num_warps=}, {NUM_PIPELINE_STAGES=} {DTYPE=}")
 
     kernel_args = (
         desc_x,
@@ -404,15 +382,11 @@ def two_pass_fwd_grouped_tma(
         )
 
     if warmup:
-        compiled_kernel: triton.compiler.CompiledKernel = kernel.warmup(
-            *kernel_args, **kernel_constexprs, grid=(1,)
-        )
+        compiled_kernel: triton.compiler.CompiledKernel = kernel.warmup(*kernel_args, **kernel_constexprs, grid=(1,))
         return compiled_kernel, kernel_args, kernel_constexprs
     else:
         # Run the kernel
-        compiled_kernel: triton.compiler.CompiledKernel = kernel[grid](
-            *kernel_args, **kernel_constexprs
-        )
+        compiled_kernel: triton.compiler.CompiledKernel = kernel[grid](*kernel_args, **kernel_constexprs)
 
         y = y.reshape(bs, seqlen, g, dg)
         if y2 is not None:

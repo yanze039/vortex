@@ -84,9 +84,7 @@ def test_custom_fftconv_causality(pytestconfig, dtype=torch.float16):
     for i in range(L):
         g = grad(y_fn[0, 0, i], x, retain_graph=True, allow_unused=True)[0]
         print(g.shape, i, g[0, 0, i + 1 :].max())
-        assert torch.allclose(
-            g[0, 0, i + 1 :], torch.zeros_like(g[0, 0, i + 1 :]), atol=1e-2
-        ), ""
+        assert torch.allclose(g[0, 0, i + 1 :], torch.zeros_like(g[0, 0, i + 1 :]), atol=1e-2), ""
 
 
 def test_custom_fftconv_hsiso(pytestconfig, dtype=torch.float16):
