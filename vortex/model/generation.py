@@ -27,7 +27,7 @@ class Generator:
         input_ids: torch.Tensor = None,
         num_tokens: int = 32,
         cached_generation: bool = True,
-        force_prompt_threshold: int = 1000,
+        force_prompt_threshold: int = None,
         max_seqlen: int = None,
         print_generation: bool = True,
         verbose: bool = False,
