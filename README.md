@@ -26,9 +26,6 @@ Note that this is does not install all dependencies required to run autoregressi
 
 ## 2. Building a custom inference environment
 
-### Using Docker
-
-Refer to the [Dockerfile](Dockerfile) for a sample build.
 
 ### Using conda, venv or uv
 
@@ -38,20 +35,7 @@ make setup-full
 ```
 Note that the `setup-full` step will compile various CUDA kernels, which usually takes at most several minutes. It may be necessary to customize CUDA header and library paths in `Makefile`.  
 
-## Inference Quickstart
-
-### In Docker
-
-To run 40b generation sample: `./run`.
-
-To run 7b generation sample: `sz=7 ./run`.
-
-To run tests: `./run ./run_tests`.
-
-To interactively execute commands in docker environment: `./run bash`.
-
-
-### Outside Docker
+### Quickstart
 
 ```bash
 python3 generate.py \
@@ -63,9 +47,17 @@ python3 generate.py \
 `--cached_generation` activates KV-caching and custom caching for different variants of Hyena layers, reducing peak memory usage and latency.
 
 
+
+### Inference in Docker
+
+Refer to the [Dockerfile](Dockerfile) for a sample build. To run Evo 2 40B generation: `./run`.
+
+
 ## Acknowledgements
 
-This project is built and maintained by [Zymrael](https://github.com/Zymrael) (Michael Poli), [garykbrixi](https://github.com/garykbrixi) (Garyk Brixi), [antonvnv](https://github.com/antonvnv) (Anton Vorontsov), [jeromeku](https://github.com/jeromeku) (Jerome Ku).
+Vortex was developed by Michael Poli ([Zymrael](https://github.com/Zymrael)).
+
+Vortex maintainers include Michael Poli ([Zymrael](https://github.com/Zymrael)), Garyk Brixi ([garykbrixi](https://github.com/garykbrixi)), Anton Vorontsov ([antonvnv](https://github.com/antonvnv)), Amy Lu ([exnx](https://github.com/exnx)), Jerome Ku ([jeromeku](https://github.com/jeromeku)).
 
 ## Cite
 
