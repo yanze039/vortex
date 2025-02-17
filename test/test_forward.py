@@ -1,10 +1,5 @@
-import argparse
-
-import pytest
 import torch
-import torch.nn as nn
 import yaml
-from src.layers import RMSNorm
 from src.model import StripedHyena
 from src.utils import dotdict
 from torch.autograd import grad
@@ -19,7 +14,11 @@ def ref_fftconv(x, h):
     fft_s = 2 * x.shape[-1]
     x = x.to(torch.float32)
     h = h.to(torch.float32)
-    y = torch.fft.irfft(torch.fft.rfft(x, n=fft_s) * torch.fft.rfft(h, n=fft_s) / fft_s, n=fft_s, norm="forward")
+    y = torch.fft.irfft(
+        torch.fft.rfft(x, n=fft_s) * torch.fft.rfft(h, n=fft_s) / fft_s,
+        n=fft_s,
+        norm="forward",
+    )
     y = y[..., : x.shape[-1]]
     return y
 

@@ -3,7 +3,6 @@
 import gc
 
 import torch
-import torch.nn as nn
 import torch.nn.functional as F
 
 try:
@@ -110,21 +109,6 @@ def list_tensors(idx):
             pass
 
 
-class Hyena2Short(nn.Module):
-    def __init__(self):
-        raise NotImplementedError
-
-
-class Hyena2Medium(nn.Module):
-    def __init__(self):
-        raise NotImplementedError
-
-
-class Hyena2Long(nn.Module):
-    def __init__(self):
-        raise NotImplementedError
-
-
 class HyenaInferenceEngine:
     def __init__(
         self,
@@ -136,9 +120,7 @@ class HyenaInferenceEngine:
         hyena_flip_x1x2=False,
     ) -> None:
         self.fir_fn = fir_fn
-        assert (
-            iir_prefill_style in IIR_PREFILL_MODES
-        ), f"iir_prefill_style must be one of {IIR_PREFILL_MODES}"
+        assert iir_prefill_style in IIR_PREFILL_MODES, f"iir_prefill_style must be one of {IIR_PREFILL_MODES}"
         self.iir_prefill_style = iir_prefill_style
         self.layer_idx = layer_idx
         self.low_mem_mode = False
@@ -166,14 +148,10 @@ class HyenaInferenceEngine:
     ):
         L = u.shape[1] if dim_last else u.shape[2]
         if gate:
-            hidden_size, num_attention_heads, hidden_size_per_attention_head, _, _ = (
-                dims
-            )
+            hidden_size, num_attention_heads, hidden_size_per_attention_head, _, _ = dims
             # Compatibility with training infra that column splits the projections
             if column_split_hyena:
-                x2, x1, v = column_split(
-                    u, num_attention_heads, hidden_size_per_attention_head
-                )
+                x2, x1, v = column_split(u, num_attention_heads, hidden_size_per_attention_head)
             else:
                 x2, x1, v = u.split([hidden_size, hidden_size, hidden_size], dim=1)
             if self.hyena_flip_x1x2:
@@ -254,9 +232,7 @@ class HyenaInferenceEngine:
             z = x2 * z
 
             if self.print_activations:
-                activations_logger.info(
-                    f"hyena filter: {weight}, {weight.min()}, {weight.max()}"
-                )
+                activations_logger.info(f"hyena filter: {weight}, {weight.min()}, {weight.max()}")
                 activations_logger.info(f"post postgate: {z}, {z.min()}, {z.max()}")
                 # if self.ground_truth_activations_path:
                 #     q_savanna = torch.load(f"{self.ground_truth_activations_path}/q_{self.layer_idx}.pt")
@@ -427,9 +403,7 @@ class HyenaInferenceEngine:
 
         return y.permute(0, 2, 1)
 
-    def step_fir(
-        self, u, fir_state, weight, bias=None, gated_bias=False, flip_filter=False
-    ):
+    def step_fir(self, u, fir_state, weight, bias=None, gated_bias=False, flip_filter=False):
         """Steps forward FIR filters in the architecture.
 
         FIR filters generally include truncated convolutions in Hyena with an explicit or hybrid time-domain parametrization:
@@ -475,6 +449,7 @@ class HyenaInferenceEngine:
         return y.to(input_dtype), fir_state
 
     def step_iir(self, x2, x1, v, D, residues, poles, iir_state, iir_groups=1):
+        # TODO: kernelize
         x1v = x1 * v
         poles = torch.exp(poles)  # poles arg contains log_poles
         poles = poles[..., 0][None]  # squeeze dummy seqlen dim and add dummy batch dim
@@ -495,9 +470,7 @@ class HyenaInferenceEngine:
         """Turns the IIR filter into a FIR and uses a cache for decoding."""
         raise NotImplementedError(":)")
 
-    def prefill_via_direct_recurrence(
-        self, inference_params, x1v, L, residues, poles, *args, **kwargs
-    ) -> torch.Tensor:
+    def prefill_via_direct_recurrence(self, inference_params, x1v, L, residues, poles, *args, **kwargs) -> torch.Tensor:
         """
         Compute the IIR state via explicit recurrence (modal form)
 
@@ -516,33 +489,21 @@ class HyenaInferenceEngine:
 
         # suppress dummy seqlen dimension
         poles = poles[:, :, 0][None]
-        residues = residues[:, :, 0][None].repeat(
-            x1v_.shape[0], 1, 1, 1
-        )  # b, d, sdim, reim
+        residues = residues[:, :, 0][None].repeat(x1v_.shape[0], 1, 1, 1)  # b, d, sdim, reim
 
         # state: b, d, sdim, reim
         # poles: 1, d, sdim, reim
         # x1v_: b, d, l, sdim, reim
         for i in range(L):
-            state[..., 0] = (
-                poles[..., 0] * state[..., 0]
-                - poles[..., 1] * state[..., 1]
-                + x1v_[:, :, i, :, 0]
-            )
-            state[..., 1] = (
-                poles[..., 0] * state[..., 1]
-                + poles[..., 1] * state[..., 0]
-                + x1v_[:, :, i, :, 1]
-            )
+            state[..., 0] = poles[..., 0] * state[..., 0] - poles[..., 1] * state[..., 1] + x1v_[:, :, i, :, 0]
+            state[..., 1] = poles[..., 0] * state[..., 1] + poles[..., 1] * state[..., 0] + x1v_[:, :, i, :, 1]
             output[:, :, i] = torch.sum(residues * state, dim=-2)[..., 0]  # .real
 
         inference_params.state_dict[self.layer_idx] = state.to(dtype=torch.float32)
 
         return output
 
-    def prefill_via_hybrid_recurrence(
-        self, inference_params, u, log_poles, x1v_f_a, L, *args, **kwargs
-    ):
+    def prefill_via_hybrid_recurrence(self, inference_params, u, log_poles, x1v_f_a, L, *args, **kwargs):
         """
         Compute the IIR state via hybrid recurrence-convolution over blocks
         """
@@ -591,9 +552,7 @@ class HyenaInferenceEngine:
         state_s = (poles.to(torch.float32) * t).exp()
 
         # state_s = poles**t
-        state_S = torch.fft.fft(state_s, n=fft_size).repeat(
-            bs, 1, 1, 1
-        )  # B, D, state_dim, 2 * L
+        state_S = torch.fft.fft(state_s, n=fft_size).repeat(bs, 1, 1, 1)  # B, D, state_dim, 2 * L
         if hyena_filter_groups > 1:
             state_S = state_S.repeat_interleave(hidden_size // hyena_filter_groups, 1)
         state = torch.fft.ifft(X_s[..., None, :] * state_S, n=fft_size)

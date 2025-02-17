@@ -7,7 +7,8 @@ Wrappers for linearly interpolated rope embeddings to use inside of MHA layers o
 
 import torch
 from einops import rearrange
-from vortex.model.rotary import RotaryEmbedding 
+from vortex.model.rotary import RotaryEmbedding
+
 
 # simple wrapper for flash-attn RoPE with linear scaling:
 class LinearlyScaledRotaryEmbedding(RotaryEmbedding):
@@ -72,14 +73,9 @@ class LinearlyScaledRotaryEmbedding(RotaryEmbedding):
                 self._sin_cached = torch.sin(freqs).to(dtype)
             else:
                 power = (
-                    torch.arange(
-                        seqlen, dtype=self.scale.dtype, device=self.scale.device
-                    )
-                    - seqlen // 2
+                    torch.arange(seqlen, dtype=self.scale.dtype, device=self.scale.device) - seqlen // 2
                 ) / self.scale_base
-                scale = self.scale.to(device=power.device) ** rearrange(
-                    power, "s -> s 1"
-                )
+                scale = self.scale.to(device=power.device) ** rearrange(power, "s -> s 1")
                 # We want the multiplication by scale to happen in fp32
                 self._cos_cached = (torch.cos(freqs) * scale).to(dtype)
                 self._sin_cached = (torch.sin(freqs) * scale).to(dtype)

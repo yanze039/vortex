@@ -8,8 +8,8 @@ with open("requirements.txt") as f:
 
 setup(
     name="vortex",
-    version="0.0.1",
-    description="Inference and utilities for inference and training of deep signal processing models",
+    version="1.0.0",
+    description="Inference and utilities for convolutional multi-hybrid models",
     long_description=readme,
     long_description_content_type="text/markdown",
     author="Michael Poli",

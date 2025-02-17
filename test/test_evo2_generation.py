@@ -1,9 +1,6 @@
-
-
 import argparse
-import os
 import csv
-from typing import Dict, List, Optional, Tuple, Any, NamedTuple, Union
+from typing import List, Optional, Union
 from pathlib import Path
 import numpy as np
 
@@ -11,12 +8,12 @@ import yaml
 
 
 def read_prompts(
-    input_file: Path, 
+    input_file: Path,
 ) -> Union[List[List[str]]]:
     """Read prompts from input file."""
     promptseqs: List[str] = []
-    
-    with open(input_file, encoding='utf-8-sig', newline='') as csvfile:
+
+    with open(input_file, encoding="utf-8-sig", newline="") as csvfile:
         reader = csv.reader(csvfile)
         next(reader)
         for row in reader:
@@ -24,13 +21,15 @@ def read_prompts(
 
     return promptseqs
 
+
 def mid_point_split(*, seq, num_tokens):
-    mid_point = 2*(len(seq)//4)
+    mid_point = 2 * (len(seq) // 4)
     prompt = seq[:mid_point]
-    target = seq[mid_point:mid_point+num_tokens] #Only compare to the section of sequence directly
+    target = seq[mid_point : mid_point + num_tokens]  # Only compare to the section of sequence directly
     return prompt, target
 
-def generate_and_score(*, sequences, model, tokenizer, args, generations_per_prompt=5, device='cuda:0'):
+
+def generate_and_score(*, sequences, model, tokenizer, args, generations_per_prompt=5, device="cuda:0"):
     """
     Prompt with first half, generate and score on 2nd half
     """
@@ -40,15 +39,15 @@ def generate_and_score(*, sequences, model, tokenizer, args, generations_per_pro
     scores = []
     prompts = []
     targets = []
-    
+
     # Prepare all prompts and targets
     for seq in sequences:
         prompt, target = mid_point_split(seq=seq, num_tokens=args.num_tokens)
-        
+
         # Repeat prompt for multiple generations
         prompts.extend([prompt] * generations_per_prompt)
         targets.extend([target] * generations_per_prompt)
-    
+
     for i in range(len(prompts)):
         prompt = prompts[i]
         target = targets[i]
@@ -72,24 +71,19 @@ def generate_and_score(*, sequences, model, tokenizer, args, generations_per_pro
             decoded_seq = ret.sequences[0]
             score = calculate_sequence_identity(decoded_seq, target)
             scores.append(score)
-    
-    # Reshape scores to group by original sequence
-    reshaped_scores = [scores[i:i + generations_per_prompt] 
-                      for i in range(0, len(scores), generations_per_prompt)]
-    
-    return reshaped_scores
-    
+
 
 def calculate_sequence_identity(seq1: str, seq2: str) -> Optional[float]:
     """Calculate sequence identity between two sequences through direct comparison."""
     if not seq1 or not seq2:
         return None
-    
+
     # Direct comparison of sequences
     min_length = min(len(seq1), len(seq2))
     matches = sum(a == b for a, b in zip(seq1[:min_length], seq2[:min_length]))
 
     return (matches / min_length) * 100
+
 
 def main():
     '''
@@ -103,7 +97,6 @@ def main():
     '''
     import torch
 
-    from vortex.model.generation import generate
     from vortex.model.model import StripedHyena
     from vortex.model.tokenizer import HFAutoTokenizer, CharLevelTokenizer
     from vortex.model.utils import dotdict, load_checkpoint
@@ -136,21 +129,25 @@ def main():
         tokenizer = CharLevelTokenizer(config.vocab_size)
     else:
         tokenizer = HFAutoTokenizer(config.vocab_file)
-    
+
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-    
+
     m = StripedHyena(config)
 
     load_checkpoint(m, checkpoint_path=args.checkpoint_path)
 
-    sequences = read_prompts('./test/data/prompts.csv')
+    sequences = read_prompts("./test/data/prompts.csv")
 
     scores = generate_and_score(
-        sequences=sequences,
-        model=m,
-        tokenizer=tokenizer,
-        args=args,
-        generations_per_prompt=args.generations_per_prompt
+        sequences,
+        g,
+        tokenizer,
+        args,
+        generations_per_prompt=args.generations_per_prompt,
+    )
+
+    scores = generate_and_score(
+        sequences=sequences, model=m, tokenizer=tokenizer, args=args, generations_per_prompt=args.generations_per_prompt
     )
 
     print(scores)
@@ -180,6 +177,7 @@ def main():
         print("Test Failed")
 
     
+
 
 if __name__ == "__main__":
     main()
