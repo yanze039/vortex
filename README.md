@@ -13,7 +13,7 @@ For training, please refer to the [savanna](https://github.com/Zymrael/savanna/)
 
 There are two main ways to interface with `vortex`:
 
-1. Use `vortex` as the inference engine for pre-trained multi-hybrids such as [Evo 2 40B](configs/evo2-40b-1M.yml). In this case, we recommend installing `vortex` in a new environment (see below).
+1. Use `vortex` as the inference engine for pre-trained multi-hybrids such as [Evo 2 40B](configs/evo2-40b-1m.yml). In this case, we recommend installing `vortex` in a new environment (see below).
 2. Import from `vortex` specific classes, kernels or utilities to work with custom convolutional multi-hybrids. For example,sourcing utilities from `hyena_ops.interface`.
 
 
