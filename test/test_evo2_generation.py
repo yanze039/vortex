@@ -150,7 +150,7 @@ def main():
 
     print(scores)
     mean_score = np.mean(scores)
-    print("\% Matching Nucleotides")
+    print("% Matching Nucleotides")
     print(mean_score)
 
     eps = 1e-1 # epsilon for float comparison
