@@ -138,7 +138,7 @@ if __name__ == "__main__":
     print(f"Mean Accuracy: {mean_accuracy * 100:.3f}%\n")
 
     eps = 1e-3 # epsilon for float comparison
-    passed = None
+    passed = True
     if 'evo2-40b-1m' in args.config_path:
         if not abs(mean_loss - 0.2159424) < eps: 
             print(f"Test Failed: Expected loss of 0.21594, got {mean_loss}")

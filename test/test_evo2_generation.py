@@ -71,6 +71,8 @@ def generate_and_score(*, sequences, model, tokenizer, args, generations_per_pro
             decoded_seq = ret.sequences[0]
             score = calculate_sequence_identity(decoded_seq, target)
             scores.append(score)
+    
+    return scores
 
 
 def calculate_sequence_identity(seq1: str, seq2: str) -> Optional[float]:
@@ -139,15 +141,11 @@ def main():
     sequences = read_prompts("./test/data/prompts.csv")
 
     scores = generate_and_score(
-        sequences,
-        g,
-        tokenizer,
-        args,
-        generations_per_prompt=args.generations_per_prompt,
-    )
-
-    scores = generate_and_score(
-        sequences=sequences, model=m, tokenizer=tokenizer, args=args, generations_per_prompt=args.generations_per_prompt
+        sequences=sequences,
+        model=m,
+        tokenizer=tokenizer,
+        args=args,
+        generations_per_prompt=args.generations_per_prompt
     )
 
     print(scores)
@@ -156,7 +154,7 @@ def main():
     print(mean_score)
 
     eps = 1e-1 # epsilon for float comparison
-    passed = None
+    passed = True
     if 'evo2-40b-1m' in args.config_path:
         assert mean_score - 91.15 < eps, f"Expected mean score of 91.15, got {mean_score}"
         passed = False
