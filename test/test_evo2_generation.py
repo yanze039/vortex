@@ -156,14 +156,11 @@ def main():
     eps = 1e-1 # epsilon for float comparison
     passed = True
     if 'evo2-40b-1m' in args.config_path:
-        assert mean_score - 91.15 < eps, f"Expected mean score of 91.15, got {mean_score}"
-        passed = False
+        assert mean_score - 91.15 < eps, f"Test Failed: Expected mean score of 91.15, got {mean_score}"
     elif 'evo2-7b-1m' in args.config_path:
-        assert mean_score - 89.25 < eps, f"Expected mean score of 89.25, got {mean_score}"
-        passed = False
+        assert mean_score - 89.25 < eps, f"Test Failed: Expected mean score of 89.25, got {mean_score}"
     elif 'evo2-1b-8k' in args.config_path:
-        assert mean_score - 68.0 < eps, f"Expected mean score of 68.0, got {mean_score}"
-        passed = False
+        assert mean_score - 68.0 < eps, f"Test Failed: Expected mean score of 68.0, got {mean_score}"
     else:
         print(f"Test Failed: Did not recognize config path {args.config_path}")
         print("Test only supports Evo 2 40B, Evo 2 7B, or Evo 2 1B base")
