@@ -10,6 +10,7 @@ TARGET_PYTHON_VERSION := 3.11
 CUDA_PATH := /usr/local/cuda
 CUDA_INCLUDE_PATH := $(CUDA_PATH)/include
 CUDA_LIB_PATH := $(CUDA_PATH)/lib64
+CUDNN_PATH := $(shell find "$(CONDA_PREFIX)/lib" -type d -path "*/site-packages/nvidia/cudnn" | head -n 1)
 CPATH := $(CUDA_INCLUDE_PATH):/usr/local/cuda/include
 CUDACXX := /usr/local/cuda/bin/nvcc
 
