@@ -8,15 +8,14 @@ import numpy as np
 import torch
 import tqdm
 
-try:
-    from tokenizers import Tokenizer
-except ImportError:
-    print("tokenizers not found, unable to use HFAutoTokenizer")
-    Tokenizer = None
-
-
 class HFAutoTokenizer:
     def __init__(self, vocab_file):
+        try:
+            from tokenizers import Tokenizer
+        except ImportError:
+            print("tokenizers not found, unable to use HFAutoTokenizer")
+            Tokenizer = None
+
         self.tokenizer = Tokenizer.from_file(vocab_file)
         self.eos = "</s>"
         self.bos = "<s>"
