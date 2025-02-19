@@ -89,7 +89,7 @@ class Generator:
         batch_size = x.shape[0]
 
         prompt_length = x.shape[1]
-        prompt_forcing = inference_params_dict is None and prompt_length > force_prompt_threshold
+        prompt_forcing = inference_params_dict is None and force_prompt_threshold is not None and prompt_length > force_prompt_threshold
         if prompt_forcing:
             forced_prompt_length = prompt_length - force_prompt_threshold
             x_force = x[:, force_prompt_threshold:]
