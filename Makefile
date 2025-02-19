@@ -10,9 +10,18 @@ TARGET_PYTHON_VERSION := 3.11
 CUDA_PATH := /usr/local/cuda
 CUDA_INCLUDE_PATH := $(CUDA_PATH)/include
 CUDA_LIB_PATH := $(CUDA_PATH)/lib64
-CUDNN_PATH := $(shell find "$(CONDA_PREFIX)/lib" -type d -path "*/site-packages/nvidia/cudnn" | head -n 1)
-CPATH := $(CUDA_INCLUDE_PATH):/usr/local/cuda/include
 CUDACXX := /usr/local/cuda/bin/nvcc
+
+ifdef CONDA_PREFIX
+  # Use find to locate the cuDNN include directory within the conda environment.
+  CONDA_CUDNN_INCLUDE := $(shell find $(CONDA_PREFIX)/lib -type d -path "*/site-packages/nvidia/cudnn/include" | head -n 1)
+  $(info Using conda cuDNN include directory: $(CONDA_CUDNN_INCLUDE))
+else
+  CONDA_CUDNN_INCLUDE :=
+endif
+
+CPATH := $(CUDA_INCLUDE_PATH):$(CONDA_CUDNN_INCLUDE)
+export CPATH
 
 _detect_cuda_path:
 ifndef CUDA_PATH
@@ -57,13 +66,13 @@ endif
 
 setup-full: submodules
 	pip install ninja cmake pybind11 numpy psutil
-	pip install -e .
+	pip install .
 	pip install transformer_engine[pytorch] --no-build-isolation 
-	cd vortex/ops/attn && MAX_JOBS=32 pip install -v -e  . --no-build-isolation
+	cd vortex/ops/attn && MAX_JOBS=32 pip install -v . --no-build-isolation
 
 setup-vortex-ops: submodules _check_env_enabled _setup_missing_env
 	pip install ninja cmake pybind11 numpy psutil
-	pip install -e .
+	pip install .
 
 submodules:
 	git submodule update --init --recursive
