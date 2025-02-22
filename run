@@ -17,7 +17,9 @@ run_args=(-it --rm
     -u $(id -u):$(id -g) -v /etc/passwd:/etc/passwd:ro -v /etc/group:/etc/group:ro
 
     -v $PWD:$PWD
-    -v $PWD/.home:$HOME # so that ~/.local and ~/.cache are project-specific
+    # Below volume-mount is useful for developing in docker env, but may harm
+    # reproducibility. Therefore, commented-out by default.
+    # -v $PWD/.home:$HOME # so that ~/.local and ~/.cache are project-specific
     -w $PWD
 
     -e sz -e cfg -e ckpt

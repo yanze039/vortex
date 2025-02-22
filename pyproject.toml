@@ -28,6 +28,13 @@ dependencies = [
     "setuptools",
 ]
 
+[project.optional-dependencies]
+# Technically, these are required dependencies, but those use legacy builds and
+# UV cannot handle them in the most general case. See
+# https://github.com/astral-sh/uv/issues/7405
+# Instead, those are handled specially via Makefile and Dockerfile
+special = ["transformer_engine[pytorch]==1.13.0"]
+
 [tool.black]
 line-length = 119
 
