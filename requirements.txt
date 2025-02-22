@@ -1,4 +1,9 @@
-torch>=2.6.0
+torch==2.5.1
+transformer_engine[pytorch]==1.13.0
+cmake
+ninja
+pyyaml
+tqdm
 rich
 ruff
 pre-commit

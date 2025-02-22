@@ -1,0 +1,29 @@
+#!/usr/bin/env bash
+set -e -o pipefail
+
+cd "$(dirname "$0")"
+
+default_cmd="./run_generate"
+
+run_args=(-it --rm
+    $DOCKER_RUN_ARGS
+    --entrypoint "" # skip image banners
+    --gpus=all
+    --ipc=host --ulimit memlock=-1 --ulimit stack=67108864
+
+    # Make docker's user id same as host machine user id
+    -u $(id -u):$(id -g) -v /etc/passwd:/etc/passwd:ro -v /etc/group:/etc/group:ro
+
+    -v $PWD:$PWD
+    -v $PWD/.home:$HOME # so that ~/.local and ~/.cache are project-specific
+    -w $PWD
+
+    -e sz -e cfg -e ckpt
+    vortex
+    ${@:-$default_cmd}
+)
+
+mkdir -p .home
+
+docker build -t vortex $DOCKER_BUILD_ARGS .
+docker run "${run_args[@]}"
