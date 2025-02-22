@@ -13,5 +13,5 @@ fi
 
 export PYTHONPATH=.
 
-python3 test/accuracy_test_forward.py    --config_path $cfg --checkpoint_path $ckpt
-python3 test/accuracy_test_generation.py --config_path $cfg --checkpoint_path $ckpt
+python3 test/test_evo2_forward.py    --config_path $cfg --checkpoint_path $ckpt
+python3 test/test_evo2_generation.py --config_path $cfg --checkpoint_path $ckpt
