@@ -3,6 +3,8 @@ set -e -o pipefail
 
 cd "$(dirname "$0")"
 
+git submodule update --init --recursive
+
 default_cmd="./run_generate"
 
 run_args=(-it --rm
