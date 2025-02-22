@@ -3,11 +3,11 @@ run apt-get update && apt-get install -y python3-pip git && rm -rf /var/lib/apt/
 
 arg REQUIREMENTS=requirements.txt
 copy ${REQUIREMENTS} .
-run --mount=type=cache,target=/root/.cache \
-    pip install -r ${REQUIREMENTS}
+# Must install torch first, as transformer engine build process will need it
+run pip install `cat requirements.txt | grep ^torch`
+run pip install -r ${REQUIREMENTS}
 
 copy vortex/ops /usr/src/vortex-ops
-run --mount=type=cache,target=/root/.cache \
-    cd /usr/src/vortex-ops/attn && MAX_JOBS=32 pip install -v -e  . --no-build-isolation
+run cd /usr/src/vortex-ops/attn && MAX_JOBS=32 pip install -v -e  . --no-build-isolation
 
 workdir /workdir
