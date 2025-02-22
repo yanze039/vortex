@@ -11,11 +11,4 @@ else
     ckpt=${ckpt:-evo2_40b.pt}
 fi
 
-if [ -e "$ckpt" ]; then
-    ckpt="--checkpoint_path $ckpt"
-else
-    echo Using random weights
-    ckpt="--dry_run"
-fi
-
-python3 generate.py $ckpt --config_path $cfg --debug
+python3 generate.py --checkpoint_path $ckpt --config_path $cfg --debug
