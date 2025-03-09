@@ -59,7 +59,7 @@ include_dirs = [
 
 ext_modules = [
     CUDAExtension(
-        name="vortex.attn.flash_attn_2_cuda",
+        name="flash_attn_2_cuda",
         sources=flash_attn_sources,
         extra_compile_args={
             "cxx": ["-O3", "-std=c++17"],
@@ -78,9 +78,9 @@ setup(
     author="Michael Poli",
     url="http://github.com/zymrael/vortex",
     license="Apache-2.0",
-    packages=find_packages(),
+    packages=find_packages(include=['vortex', 'vortex.*']),
     ext_modules=ext_modules,
-    cmdclass={"build_ext": BuildExtension},
+    cmdclass={"build_ext": BuildExtension.with_options(use_ninja=True)},
     python_requires=">=3.10",
     zip_safe=False,
     include_package_data=False,

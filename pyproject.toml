@@ -2,12 +2,11 @@
 requires = [
     "torch>=2.5.1",
     "setuptools>=42",
-    "numpy",
     "wheel",
     "cmake",
     "pybind11",
     "ninja",
-    "transformer_engine[pytorch]==1.13.0"
+    "numpy",
 ]
 build-backend = "setuptools.build_meta"
 
@@ -20,8 +19,12 @@ license = { file = "LICENSE" }
 authors = [{ name = "Michael Poli" }]
 requires-python = ">=3.10"
 dependencies = [
+    "torch>=2.5.1",
+    "transformer_engine[pytorch]==1.13.0",
+    "numpy",
     "einops==0.8.0",
     "packaging",
+    "rich",
     "tqdm",
     "PyYAML",
 ]
