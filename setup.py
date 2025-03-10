@@ -70,7 +70,7 @@ ext_modules = [
 ]
 
 setup(
-    name="vortex",
+    name="vtx",
     version="1.0.0",
     description="Inference and utilities for convolutional multi-hybrid models",
     long_description=open("README.md", encoding="utf-8").read(),
