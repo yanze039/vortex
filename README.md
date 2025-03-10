@@ -33,14 +33,27 @@ To interactively execute commands in docker environment: `./run bash`.
 
 For non-Docker setup, please follow instructions below.
 
-## 1. Quick install for vortex ops
+## 1. Pip install (easiest)
+
+The simplest way to install Vortex is from PyPi. This requires you to have CUDA already installed.
+
+```bash
+pip install vtx
+```
+or you can install Vortex after cloning the repository:
+```bash
+pip install .
+```
+Note this will take a few minutes to compile the necessary
+
+## 2. Quick install for vortex ops
 
 ```bash
 make setup-vortex-ops
 ```
 Note that this does not install all dependencies required to run autoregressive inference with larger pre-trained models.
 
-## 2. Building a custom inference environment
+## 3. Building a custom development environment
 
 ### Using conda, venv or uv
 
