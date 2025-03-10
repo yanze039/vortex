@@ -57,13 +57,13 @@ endif
 
 setup-full: submodules
 	pip install ninja cmake pybind11 numpy psutil
-	pip install -e .
+	pip install -e . --config-settings=build-script=local_setup.py
 	pip install transformer_engine[pytorch] --no-build-isolation 
 	cd vortex/ops/attn && MAX_JOBS=32 pip install -v -e  . --no-build-isolation
 
 setup-vortex-ops: submodules _check_env_enabled _setup_missing_env
 	pip install ninja cmake pybind11 numpy psutil
-	pip install -e .
+	pip install -e . --config-settings=build-script=local_setup.py
 
 setup-vortex-ops-hyenax: _check_env_enabled _setup_missing_env
 	cd vortex/ops/hyenax && pip install -e .
