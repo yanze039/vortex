@@ -16,7 +16,21 @@ There are two main ways to interface with `vortex`:
 1. Use `vortex` as the inference engine for pre-trained multi-hybrids such as [Evo 2 40B](configs/evo2-40b-1m.yml). In this case, we recommend installing `vortex` in a new environment (see below).
 2. Import from `vortex` specific classes, kernels or utilities to work with custom convolutional multi-hybrids. For example,sourcing utilities from `hyena_ops.interface`.
 
-## Running in a Docker Environment
+
+## 1. Pip install (easiest)
+
+The simplest way to install `vortex` is from PyPi. This requires you to have dependencies already installed.
+
+```bash
+pip install vtx
+```
+or you can install Vortex after cloning the repository:
+```bash
+pip install .
+```
+Note this will take a few minutes to compile the necessary
+
+## 2. Running in a Docker environment
 
 Docker is one of the easiest ways to get started with Vortex (and Evo 2). The
 Docker environment does not depend on the currently installed CUDA version and
@@ -32,19 +46,6 @@ To run tests: `./run ./run_tests`.
 To interactively execute commands in docker environment: `./run bash`.
 
 For non-Docker setup, please follow instructions below.
-
-## 1. Pip install (easiest)
-
-The simplest way to install Vortex is from PyPi. This requires you to have CUDA already installed.
-
-```bash
-pip install vtx
-```
-or you can install Vortex after cloning the repository:
-```bash
-pip install .
-```
-Note this will take a few minutes to compile the necessary
 
 ## 2. Quick install for vortex ops
 
