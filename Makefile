@@ -65,6 +65,9 @@ setup-vortex-ops: submodules _check_env_enabled _setup_missing_env
 	pip install ninja cmake pybind11 numpy psutil
 	pip install -e .
 
+setup-vortex-ops-hyenax: _check_env_enabled _setup_missing_env
+	cd vortex/ops/hyenax && pip install -e .
+
 submodules:
 	git submodule update --init --recursive
 
