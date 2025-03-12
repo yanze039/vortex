@@ -6,7 +6,9 @@ import torch.nn as nn
 from triton_indirect_fwd import (
     full_hyena_x_fwd,
     hyena_x_bdl_fwd,
+    hyena_x_bdl_dchunk_fwd,
     hyena_x_fwd_causal_conv1d,
+    hyena_x_bdl_dchunk_independent_fwd, 
     hyena_x_fwd_ref,
     HyenaXInnerFunc,
 )
@@ -16,9 +18,9 @@ torch.manual_seed(1234)
 ATOL = 1e-2
 RTOL = 1e-2
 L = 256
-D = 1024
-B = 128
-L_h = 7
+D = 2048
+B = 32
+L_h = 16
 
 
 def get_inputs(B, D, L, L_h, input_type="(qkv, h)"):
@@ -56,10 +58,14 @@ print(f"Running BDL Hyena-X forward pass...")
 y_bdl_kernel = hyena_x_bdl_fwd(q=q, k=k, v=v, h=h)
 print(f"BDL Hyena-X forward pass complete: {y_bdl_kernel.shape}", end='\n\n')
 
+print(f"Running BDL Independent Hyena-X forward pass...")
+y_bdl_independent_kernel = hyena_x_bdl_dchunk_independent_fwd(q=q, k=k, v=v, h=h)
+print(f"BDL Independent Hyena-X forward pass complete: {y_bdl_independent_kernel.shape}", end='\n\n')
 
-print(y_bdl_kernel, y_ref)
+print(y_bdl_independent_kernel, y_ref)
 print(f"Testing accuracy with atol={ATOL}, rtol={RTOL}...")
 torch.testing.assert_close(y_ref, y_bdl_kernel, atol=ATOL, rtol=RTOL)
+#torch.testing.assert_close(y_ref, y_bdl_independent_kernel, atol=ATOL, rtol=RTOL)
 print(f"Accuracy test complete", end='\n\n')
 
 
@@ -81,12 +87,15 @@ def benchmark_impl(func, input_type="(qkv, h)", warmup=10, repeat=10):
         total_time += (end - start)
     return total_time / repeat
 
-for func in [hyena_x_fwd_ref]:
+
+for func in [hyena_x_fwd_ref, hyena_x_fwd_causal_conv1d]:
+    if func.__name__ == "hyena_x_fwd_causal_conv1d" and L_h > 4:
+        break
     print(f"Benchmarking {func.__name__}...")
     t = benchmark_impl(func=func, input_type="(qkv, h)", repeat=20, warmup=5)
     print(f"{func.__name__} complete: {t * 1e6} microseconds", end='\n\n')
 
-for func in [hyena_x_bdl_fwd]:
+for func in [hyena_x_bdl_dchunk_fwd]:
     print(f"Benchmarking {func.__name__}...")
     t = benchmark_impl(func=func, input_type="(q, k, v, h)", repeat=20, warmup=5)
     print(f"{func.__name__} complete: {t * 1e6} microseconds", end='\n\n')
