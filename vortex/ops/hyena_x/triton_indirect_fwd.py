@@ -88,7 +88,7 @@ def hyena_x_fwd_bdl_kernel(
     q_ptr, k_ptr, v_ptr, hq_ptr, hk_ptr, hv_ptr, o_ptr, L: tl.constexpr, L_h: tl.constexpr, D: tl.constexpr, BL: tl.constexpr, NBL: tl.constexpr, _f: tl.constexpr
 ):
     """
-    Hyena-X forward with indirect im2col convolution. Processes each channel and batch index independently. 
+    Hyena-X forward with indirect convolution. Processes each channel and batch index independently. 
     """
     i_b, i_d, i_l = tl.program_id(0), tl.program_id(1), tl.program_id(2)
     q_ptr, k_ptr, v_ptr, o_ptr = move_to_base_offset(q_ptr, k_ptr, v_ptr, o_ptr, L, D, BL)
@@ -126,11 +126,11 @@ def hyena_x_fwd_bdl_kernel(
         b_hv = tl.broadcast_to(h_v[:, None], (BL, BL))
 
         z_q = b_hq * b_q 
-        z_q = tl.sum(z_q, axis=0) 
+        z_q = tl.sum(z_q, axis=0) / BL
         z_k = b_hk * b_k 
-        z_k = tl.sum(z_k, axis=0) 
+        z_k = tl.sum(z_k, axis=0) / BL
         z_v = b_hv * b_v 
-        z_v = tl.sum(z_v, axis=0) 
+        z_v = tl.sum(z_v, axis=0) / BL
 
         b_o = z_q * z_k * z_v 
         tl.store(o_ptr + tl.arange(0, BL), b_o, boundary_check=(0))
@@ -149,7 +149,7 @@ def hyena_x_fwd_bdl_dchunk_kernel(
     L: tl.constexpr, L_h: tl.constexpr, D: tl.constexpr, BD: tl.constexpr, BL: tl.constexpr, NBL: tl.constexpr, _f: tl.constexpr
 ):
     """
-    Hyena-X forward with indirect im2col convolution.
+    Hyena-X forward with indirect convolution.
     """
 
     i_b, i_d, i_l = tl.program_id(0), tl.program_id(1), tl.program_id(2)
@@ -191,11 +191,11 @@ def hyena_x_fwd_bdl_dchunk_kernel(
             b_hv = tl.broadcast_to(h_v[:, None], (BL, BL))
 
             z_q = b_hq * b_q 
-            z_q = tl.sum(z_q, axis=0) 
+            z_q = tl.sum(z_q, axis=0) / BL
             z_k = b_hk * b_k 
-            z_k = tl.sum(z_k, axis=0) 
+            z_k = tl.sum(z_k, axis=0) / BL
             z_v = b_hv * b_v 
-            z_v = tl.sum(z_v, axis=0) 
+            z_v = tl.sum(z_v, axis=0) / BL
 
             b_o = z_q * z_k * z_v 
             b_o = tl.where(tl.arange(0, BD)[:, None] == d, b_o, b_o)
@@ -221,7 +221,7 @@ def hyena_x_fwd_bdl_dchunk_independent_kernel(
     L: tl.constexpr, L_h: tl.constexpr, D: tl.constexpr, BD: tl.constexpr, BL: tl.constexpr, NBL: tl.constexpr, _f: tl.constexpr
 ):
     """
-    Indirect im2col convolution, applied independently to each feature group.
+    Indirect convolution, applied independently to each feature group.
     """
 
     i_b, i_d, i_l = tl.program_id(0), tl.program_id(1), tl.program_id(2)
@@ -245,7 +245,7 @@ def hyena_x_fwd_bdl_dchunk_independent_kernel(
         else:
             b_h = tl.broadcast_to(h[:, None], (BL, BL))
             z = b_h * b_x 
-            z = tl.sum(z, axis=0) 
+            z = tl.sum(z, axis=0) / BL 
             b_o = tl.where(tl.arange(0, BD)[:, None] == d, z, b_o)
 
         h_ptr, x_ptr = shift_d_bdl(h_ptr, L_h), shift_d_bdl(x_ptr, L)
