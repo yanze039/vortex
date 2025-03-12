@@ -1,31 +1,32 @@
 [build-system]
 requires = [
-    "setuptools",
+    "torch>=2.5.1",
+    "setuptools>=42",
     "wheel",
+    "cmake",
+    "pybind11",
+    "ninja",
+    "numpy",
 ]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "vortex"
+name = "vtx"
 version = "1.0.0"
 description = "Reference implementation of operators for deep signal processing architectures"
 readme = "README.md"
-license = {file = "LICENSE"}
-authors = [{ name = "Michael Poli"}]
-requires-python = ">=3.11"
+license = { file = "LICENSE" }
+authors = [{ name = "Michael Poli" }]
+requires-python = ">=3.10"
 dependencies = [
-    "torch==2.5.1",
-    "rich==13.9.2",
-    "ruff==0.1.1",
+    "torch>=2.5.1",
+    "transformer_engine[pytorch]==1.13.0",
     "numpy",
-    "pre-commit==4.0.1",
     "einops==0.8.0",
     "packaging",
-    "pip",
-    "build",
-    "wheel",
+    "rich",
     "tqdm",
-    "setuptools",
+    "PyYAML",
 ]
 
 [tool.black]
@@ -38,7 +39,4 @@ combine_as_imports = true
 combine_star = true
 
 [tool.setuptools]
-packages = ['vortex']
-
-
-
+packages = ["vortex"]

@@ -1,4 +1,8 @@
-torch>=2.6.0
+<<<<<<< HEAD
+# Don't use this file: dependencies are now in pyproject.toml
+=======
+torch>=2.5.1
 rich
 ruff
 pre-commit
+>>>>>>> origin/main
