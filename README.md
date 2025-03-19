@@ -30,23 +30,6 @@ pip install .
 ```
 Note this will take a few minutes to compile the necessary
 
-## 2. Running in a Docker environment
-
-Docker is one of the easiest ways to get started with Vortex (and Evo 2). The
-Docker environment does not depend on the currently installed CUDA version and
-ensures that major dependencies (such as PyTorch and Transformer Engine) are
-pinned to specific versions, which is beneficial for reproducibility.
-
-To run Evo 2 40B generation sample, simply run `./run`.
-
-To run Evo 2 7B generation sample: `sz=7 ./run`.
-
-To run tests: `./run ./run_tests`.
-
-To interactively execute commands in docker environment: `./run bash`.
-
-For non-Docker setup, please follow instructions below.
-
 ## 2. Quick install for vortex ops
 
 ```bash
@@ -63,6 +46,21 @@ To run e2e installation in a uv environment, use the following command:
 make setup-full
 ```
 Note that the `setup-full` step will compile various CUDA kernels, which usually takes at most several minutes. It may be necessary to customize CUDA header and library paths in `Makefile`.  
+
+## 4. Running in a Docker environment
+
+Docker is one of the easiest ways to get started with Vortex (and Evo 2). The
+Docker environment does not depend on the currently installed CUDA version and
+ensures that major dependencies (such as PyTorch and Transformer Engine) are
+pinned to specific versions, which is beneficial for reproducibility.
+
+To run Evo 2 40B generation sample, simply run `./run`.
+
+To run Evo 2 7B generation sample: `sz=7 ./run`.
+
+To run tests: `./run ./run_tests`.
+
+To interactively execute commands in docker environment: `./run bash`.
 
 ### Generation quickstart
 
