@@ -19,7 +19,7 @@ def get_cuda_bare_metal_version(cuda_dir: Path):
     return raw_output, bare_metal_version
 
 if CUDA_HOME is None:
-    warnings.warn("CUDA_HOME is not set; NVCC may not be available.")
+    raise RuntimeError("CUDA_HOME is not set; NVCC may not be available. Please set it to the path of your CUDA installation and make sure PyTorch is built with CUDA support.")
 else:
     # Check that the installed CUDA is supported (>= 11.7)
     _, bare_metal_version = get_cuda_bare_metal_version(Path(CUDA_HOME))
@@ -49,12 +49,16 @@ flash_attn_sources = [
     str(setup_dir / "vortex/ops/attn/csrc/flash_attn/src/flash_fwd_split_hdim128_bf16_sm80.cu"),
 ]
 
+if 'CUDNN_HOME' not in os.environ:
+    os.environ['CUDNN_HOME'] = '/usr/local/cuda'  # Default location
+
 include_dirs = [
     str(setup_dir / "vortex/ops/attn/csrc/flash_attn"),
     str(setup_dir / "vortex/ops/attn/csrc/flash_attn/src"),
     str(setup_dir / "vortex/ops/cutlass/include/"),
     str(setup_dir / "vortex/ops/cutlass/include/cute"),
     str(setup_dir / "vortex/ops/cutlass/include/cutlass"),
+    str(os.environ.get('CUDNN_HOME', '')),
 ]
 
 ext_modules = [
@@ -71,7 +75,7 @@ ext_modules = [
 
 setup(
     name="vtx",
-    version="1.0.0",
+    version="1.0.4",
     description="Inference and utilities for convolutional multi-hybrid models",
     long_description=open("README.md", encoding="utf-8").read(),
     long_description_content_type="text/markdown",

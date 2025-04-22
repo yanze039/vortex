@@ -28,7 +28,7 @@ or you can install Vortex after cloning the repository:
 ```bash
 pip install .
 ```
-Note this will take a few minutes to compile the necessary
+Note this will take a few minutes to compile, which can be sped up by being on more CPUs.
 
 ## 2. Quick install for vortex ops
 

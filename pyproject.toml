@@ -1,6 +1,6 @@
 [build-system]
 requires = [
-    "torch>=2.5.1",
+    "torch>=2.6.0",
     "setuptools>=42",
     "wheel",
     "cmake",
@@ -12,14 +12,13 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "vtx"
-version = "1.0.0"
+version = "1.0.4"
 description = "Reference implementation of operators for deep signal processing architectures"
 readme = "README.md"
-license = { file = "LICENSE" }
 authors = [{ name = "Michael Poli" }]
 requires-python = ">=3.10"
 dependencies = [
-    "torch>=2.5.1",
+    "torch>=2.6.0",
     "transformer_engine[pytorch]==1.13.0",
     "numpy",
     "einops==0.8.0",
@@ -37,6 +36,3 @@ profile = "black"
 line_length = 119
 combine_as_imports = true
 combine_star = true
-
-[tool.setuptools]
-packages = ["vortex"]
