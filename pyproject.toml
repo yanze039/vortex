@@ -1,6 +1,6 @@
 [build-system]
 requires = [
-    "torch>=2.6.0",
+    "torch>=2.5.0,<=2.6.1",
     "setuptools>=42",
     "wheel",
     "cmake",
@@ -18,7 +18,7 @@ readme = "README.md"
 authors = [{ name = "Michael Poli" }]
 requires-python = ">=3.10"
 dependencies = [
-    "torch>=2.6.0",
+    "torch>=2.5.1,<=2.6.1",
     "transformer_engine[pytorch]==1.13.0",
     "numpy",
     "einops==0.8.0",
