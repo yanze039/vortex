@@ -12,11 +12,12 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "vtx"
-version = "1.0.4"
+version = "1.0.6"
 description = "Reference implementation of operators for deep signal processing architectures"
 readme = "README.md"
 authors = [{ name = "Michael Poli" }]
 requires-python = ">=3.10"
+license = "Apache-2.0"
 dependencies = [
     "torch>=2.5.1,<=2.6.1",
     "transformer_engine[pytorch]==1.13.0",

@@ -75,13 +75,12 @@ ext_modules = [
 
 setup(
     name="vtx",
-    version="1.0.4",
+    version="1.0.6",
     description="Inference and utilities for convolutional multi-hybrid models",
     long_description=open("README.md", encoding="utf-8").read(),
     long_description_content_type="text/markdown",
     author="Michael Poli",
     url="http://github.com/zymrael/vortex",
-    license="Apache-2.0",
     packages=find_packages(include=['vortex', 'vortex.*']),
     ext_modules=ext_modules,
     cmdclass={"build_ext": BuildExtension.with_options(use_ninja=True)},
