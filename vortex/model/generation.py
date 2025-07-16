@@ -35,7 +35,7 @@ class Generator:
         stop_at_eos: bool = True,
         inference_params_dict: dict = None,
         token_callback=lambda i: None,
-    ) -> tuple[torch.Tensor, torch.Tensor]:
+    ) -> tuple[torch.Tensor, torch.Tensor, dict]:
         """
         Generates using the model with optional cached sampling replay.
 
@@ -64,8 +64,11 @@ class Generator:
                 generated. Defaults to None.
 
         Returns:
-            dict: The inference parameters dictionary used for generation, which can
-                be used to replay the exact same sampling sequence.
+            tuple[torch.Tensor, torch.Tensor, dict]: A tuple containing:
+                - generation: Generated token sequences of shape (batch_size, num_generated_tokens)
+                - scores: Token generation scores/logits of shape (batch_size, num_generated_tokens, vocab_size)
+                - inference_params_dict: The inference parameters dictionary used for generation, which can
+                  be used to replay the exact same sampling sequence.
         """
         if isinstance(self.tokenizer.eos, int):
             eos_token_ids = torch.LongTensor([self.tokenizer.eos]).to(device)
