@@ -5,7 +5,7 @@ description = "Reference implementation of operators for deep signal processing 
 readme = "README.md"
 authors = [{ name = "Michael Poli" }]
 requires-python = ">=3.10"
-license = {file = "LICENSE"}
+license-files = ["LICENSE"]
 dependencies = [
     "torch",
     "numpy",

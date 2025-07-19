@@ -27,8 +27,9 @@ Vortex requires PyTorch and Transformer Engine, and it is strongly recommended t
 *   **[Transformer Engine](https://github.com/NVIDIA/TransformerEngine):** NVIDIA's Transformer Engine.
 *   **[Flash Attention](https://github.com/Dao-AILab/flash-attention/tree/main):** For optimized attention operations.
 
-We recommended using `conda` to easily install [Transformer Engine](https://github.com/NVIDIA/TransformerEngine). Example of installing recommended versions:
+Example of installing prerequisites. We recommended using `conda` for easy installation of Transformer Engine:
 ```bash
+pip install torch==2.7.1+cu128 --index-url https://download.pytorch.org/whl/test/cu128 #use appropriate version for your system
 conda install -c conda-forge transformer-engine-torch==2.3.0
 pip install flash-attn==2.8.0.post2
 ```
