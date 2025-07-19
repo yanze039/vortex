@@ -1,33 +1,25 @@
-[build-system]
-requires = [
-    "torch>=2.5.0,<=2.6.1",
-    "setuptools>=42",
-    "wheel",
-    "cmake",
-    "pybind11",
-    "ninja",
-    "numpy",
-]
-build-backend = "setuptools.build_meta"
-
 [project]
 name = "vtx"
-version = "1.0.6"
+version = "1.0.7"
 description = "Reference implementation of operators for deep signal processing architectures"
 readme = "README.md"
 authors = [{ name = "Michael Poli" }]
 requires-python = ">=3.10"
-license = "Apache-2.0"
+license = {file = "LICENSE"}
 dependencies = [
-    "torch>=2.5.1,<=2.6.1",
-    "transformer_engine[pytorch]==1.13.0",
+    "torch",
     "numpy",
-    "einops==0.8.0",
+    "einops==0.8.1",
+    "transformer_engine>=2.0.0",
     "packaging",
     "rich",
     "tqdm",
     "PyYAML",
 ]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["vortex*"]
 
 [tool.black]
 line-length = 119

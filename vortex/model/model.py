@@ -1,5 +1,6 @@
 # Copyright (c) 2024, Michael Poli.
 
+import io # For BytesIO handling
 import math
 import torch
 import torch.nn as nn
@@ -33,6 +34,7 @@ import logging
 from tqdm import tqdm
 
 from vortex.model.attention import MHA
+from transformer_engine.common.recipe import Format, DelayedScaling
 
 try:
     from vortex.model.positional_embeddings import swap_mha_rope
@@ -869,10 +871,92 @@ class StripedHyena(nn.Module):
 
         filtered_dict = {k: v for k, v in state_dict.items() if k in model_dict}
 
-        if all("._extra_state" in k for k in missing_in_state_dict):
-            self.logger.info("Checkpoint has no FP8 extra state, will be using initial state.")
-            for k in missing_in_state_dict:
-                filtered_dict[k] = None
+        # Define a default recipe for FP8, used if a recipe is missing from an _extra_state
+        fp8_format = Format.HYBRID
+        default_recipe = DelayedScaling(fp8_format=fp8_format, amax_history_len=16, amax_compute_algo="max")
+
+        # Iterate over filtered_dict to ensure _extra_state for TE Linear layers have 'recipe'
+        for k in list(filtered_dict.keys()): # Iterate over a copy of keys as we might modify the dict
+            if k.endswith('._extra_state'):
+                module_path = k.rsplit('._extra_state', 1)[0]
+                try:
+                    current_module = self
+                    for attr in module_path.split('.'):
+                        current_module = getattr(current_module, attr)
+
+                    # Check if it's a TransformerEngine Linear module or LoRALinear (which wraps TE Linear)
+                    if isinstance(current_module, TELinear) or isinstance(current_module, LoRALinear):
+                        
+                        extra_state_value = filtered_dict[k] # Current value from filtered_dict
+                        te_fp8_meta = {} # This will hold the deserialized fp8_meta dict
+
+                        if isinstance(extra_state_value, io.BytesIO):
+                            # Deserialize BytesIO to dict
+                            extra_state_value.seek(0)
+                            te_fp8_meta = torch.load(extra_state_value)
+                        elif isinstance(extra_state_value, dict):
+                            # Already a dict
+                            te_fp8_meta = extra_state_value
+                        elif extra_state_value is None:
+                            # If None, initialize an empty dict
+                            self.logger.info(f"Initialized empty fp8_meta for {k}")
+                            te_fp8_meta = {}
+                        
+                        # Add default recipe if missing
+                        if "recipe" not in te_fp8_meta:
+                            self.logger.info(f"Injecting default FP8 recipe into {k}")
+                            te_fp8_meta["recipe"] = default_recipe
+
+                        # Add scaling_fwd/bwd if the module has them but they are missing from saved state
+                        # This assumes the current_module.fp8_meta is correctly initialized by TE.
+                        if hasattr(current_module, 'fp8_meta'):
+                            if hasattr(current_module.fp8_meta, "scaling_fwd") and "scaling_fwd" not in te_fp8_meta:
+                                te_fp8_meta["scaling_fwd"] = current_module.fp8_meta["scaling_fwd"]
+                            if hasattr(current_module.fp8_meta, "scaling_bwd") and "scaling_bwd" not in te_fp8_meta:
+                                te_fp8_meta["scaling_bwd"] = current_module.fp8_meta["scaling_bwd"]
+
+                        # Re-serialize if it was originally BytesIO or if it was modified
+                        if isinstance(extra_state_value, io.BytesIO) or "recipe" in te_fp8_meta or \
+                           ("scaling_fwd" in te_fp8_meta and "scaling_fwd" not in te_fp8_meta) or \
+                           ("scaling_bwd" in te_fp8_meta and "scaling_bwd" not in te_fp8_meta):
+                            
+                            buffer = io.BytesIO()
+                            torch.save(te_fp8_meta, buffer)
+                            buffer.seek(0)
+                            filtered_dict[k] = buffer
+                        elif extra_state_value is None: # If it was None, and now it's a dict, just assign it.
+                            filtered_dict[k] = te_fp8_meta
+
+                except AttributeError:
+                    self.logger.debug(f"Could not find module for {k}, skipping recipe injection.")
+                except Exception as e:
+                    self.logger.warning(f"Error processing _extra_state for {k}: {e}")
+        
+        # Handle _extra_state keys that are entirely missing from the loaded state_dict
+        for k in missing_in_state_dict:
+            if k.endswith('._extra_state'):
+                module_path = k.rsplit('._extra_state', 1)[0]
+                try:
+                    current_module = self
+                    for attr in module_path.split('.'):
+                        current_module = getattr(current_module, attr)
+                    if isinstance(current_module, TELinear) or isinstance(current_module, LoRALinear):
+                        self.logger.info(f"Adding missing FP8 extra state with default recipe for {k}")
+                        te_fp8_meta = {"recipe": default_recipe}
+                        if hasattr(current_module, 'fp8_meta'):
+                            if hasattr(current_module.fp8_meta, "scaling_fwd"):
+                                te_fp8_meta["scaling_fwd"] = current_module.fp8_meta["scaling_fwd"]
+                            if hasattr(current_module.fp8_meta, "scaling_bwd"):
+                                te_fp8_meta["scaling_bwd"] = current_module.fp8_meta["scaling_bwd"]
+                        
+                        buffer = io.BytesIO()
+                        torch.save(te_fp8_meta, buffer)
+                        buffer.seek(0)
+                        filtered_dict[k] = buffer
+                except AttributeError:
+                    self.logger.debug(f"Module for missing key {k} not found. Skipping.")
+                except Exception as e:
+                    self.logger.warning(f"Error creating missing _extra_state for {k}: {e}")
 
         self.load_state_dict(filtered_dict, strict=strict)
         fixup_fp8_extra_states(self)
