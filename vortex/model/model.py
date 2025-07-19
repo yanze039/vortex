@@ -904,7 +904,6 @@ class StripedHyena(nn.Module):
                         
                         # Add default recipe if missing
                         if "recipe" not in te_fp8_meta:
-                            self.logger.info(f"Injecting default FP8 recipe into {k}")
                             te_fp8_meta["recipe"] = default_recipe
 
                         # Add scaling_fwd/bwd if the module has them but they are missing from saved state

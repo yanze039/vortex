@@ -24,10 +24,10 @@ The simplest way to install `vortex` is from PyPi or github.
 Vortex requires PyTorch and Transformer Engine, and it is strongly recommended to also use Flash Attention. For detailed instructions and compatibility information, please refer to their respective GitHub repositories:
 
 *   **[PyTorch with CUDA](https://github.com/pytorch/pytorch):** Ensure you have a CUDA-enabled PyTorch installation compatible with your NVIDIA drivers.
-*   **[Transformer Engine 2](https://github.com/NVIDIA/TransformerEngine):** NVIDIA's Transformer Engine.
+*   **[Transformer Engine](https://github.com/NVIDIA/TransformerEngine):** NVIDIA's Transformer Engine.
 *   **[Flash Attention](https://github.com/Dao-AILab/flash-attention/tree/main):** For optimized attention operations.
 
-We recommended using `conda` for easy installation of Transformer Engine. Example of installing recommended versions:
+We recommended using `conda` to easily install [Transformer Engine](https://github.com/NVIDIA/TransformerEngine). Example of installing recommended versions:
 ```bash
 conda install -c conda-forge transformer-engine-torch==2.3.0
 pip install flash-attn==2.8.0.post2
