@@ -21,7 +21,7 @@ There are two main ways to interface with `vortex`:
 The simplest way to install `vortex` is from PyPi or github.
 
 ### Requirements
-Vortex requires PyTorch and Transformer Engine, and it is strongly recommended to also use Flash Attention. For detailed instructions and compatibility information, please refer to their respective GitHub repositories. Note TransformerEngine recommends python 3.12 and has these [system requirements](https://github.com/NVIDIA/TransformerEngine?tab=readme-ov-file#system-requirements).
+Vortex requires PyTorch and Transformer Engine, and it is strongly recommended to also use Flash Attention. For detailed instructions and compatibility information, please refer to their respective GitHub repositories. Note TransformerEngine requires python 3.12 and has these additional [system requirements](https://github.com/NVIDIA/TransformerEngine?tab=readme-ov-file#system-requirements).
 
 *   **[PyTorch with CUDA](https://github.com/pytorch/pytorch):** Ensure you have a CUDA-enabled PyTorch installation compatible with your NVIDIA drivers.
 *   **[Transformer Engine](https://github.com/NVIDIA/TransformerEngine):** NVIDIA's Transformer Engine.
@@ -29,7 +29,7 @@ Vortex requires PyTorch and Transformer Engine, and it is strongly recommended t
 
 Example of installing prerequisites. We recommended using `conda` for easy installation of Transformer Engine:
 ```bash
-pip install torch==2.7.1+cu128 --index-url https://download.pytorch.org/whl/test/cu128 #use appropriate version for your system
+conda install -c nvidia cuda-nvcc cuda-cudart-dev
 conda install -c conda-forge transformer-engine-torch==2.3.0
 pip install flash-attn==2.8.0.post2
 ```
