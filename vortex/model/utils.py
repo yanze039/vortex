@@ -95,8 +95,9 @@ def load_checkpoint(model, checkpoint_path):
     # in Transformer Engine layers' _extra keys. If not, weights_only=True
     # will not be happy.
     import io
+    from transformer_engine.common.recipe import DelayedScaling, Format, _FormatHelper
 
-    torch.serialization.add_safe_globals([io.BytesIO])
+    torch.serialization.add_safe_globals([io.BytesIO, DelayedScaling, Format, _FormatHelper])
 
     with torch.inference_mode():
         state = torch.load(
@@ -157,7 +158,7 @@ def fixup_fp8_extra_states(module):
 
         # Make sure we actually fixed everything we wanted.
         for k in ["scaling_fwd", "scaling_bwd"]:
-            for attr in ["amax_history", "scale", "scale_inv"]:
+            for attr in ["amax_history", "scale"]:
                 tensor = getattr(module.fp8_meta[k], attr)
                 assert tensor.device == device, (k, tensor, device)
 

@@ -1,5 +1,4 @@
 ## Original Hyena models
-
 ```bibtex
 @inproceedings{poli2023hyena,
   title={Hyena hierarchy: Towards larger convolutional language models},
@@ -53,5 +52,26 @@
   pages={eado9336},
   year={2024},
   publisher={American Association for the Advancement of Science}
+}
+```
+
+## StripedHyena 2: Convolutional multi-hybrids at scale
+```bibtex
+@article{ku2025systems,
+  title={Systems and algorithms for convolutional multi-hybrid language models at scale},
+  author={Ku, Jerome and Nguyen, Eric and Romero, David W and Brixi, Garyk and Yang, Brandon and Vorontsov, Anton and Taghibakhshi, Ali and Lu, Amy X and Burke, Dave P and Brockman, Greg and others},
+  journal={arXiv preprint},
+  year={2025}
+}
+```
+
+## Evo 2
+```bibtex
+@article{brixi2025genome,
+  title={Genome modeling and design across all domains of life with Evo 2},
+  author={Brixi, Garyk and Durrant, Matthew G and Ku, Jerome and Poli, Michael and Brockman, Greg and Chang, Daniel and Gonzalez, Gabriel A and King, Samuel H and Li, David B and Merchant, Aditi T and others},
+  journal={BioRxiv},
+  year={2025},
+  publisher={Cold Spring Harbor Laboratory}
 }
 ```

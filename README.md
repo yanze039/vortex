@@ -16,19 +16,33 @@ There are two main ways to interface with `vortex`:
 1. Use `vortex` as the inference engine for pre-trained multi-hybrids such as [Evo 2 40B](configs/evo2-40b-1m.yml). In this case, we recommend installing `vortex` in a new environment (see below).
 2. Import from `vortex` specific classes, kernels or utilities to work with custom convolutional multi-hybrids. For example,sourcing utilities from `hyena_ops.interface`.
 
+## 1. Pip install
 
-## 1. Pip install (easiest)
+The simplest way to install `vortex` is from PyPi or github.
 
-The simplest way to install `vortex` is from PyPi. This requires you to have dependencies already installed.
+### Requirements
+Vortex requires PyTorch and Transformer Engine, and it is strongly recommended to also use Flash Attention. For detailed instructions and compatibility information, please refer to their respective GitHub repositories. Note TransformerEngine requires python 3.12 and has these additional [system requirements](https://github.com/NVIDIA/TransformerEngine?tab=readme-ov-file#system-requirements).
 
+*   **[PyTorch with CUDA](https://github.com/pytorch/pytorch):** Ensure you have a CUDA-enabled PyTorch installation compatible with your NVIDIA drivers.
+*   **[Transformer Engine](https://github.com/NVIDIA/TransformerEngine):** NVIDIA's Transformer Engine.
+*   **[Flash Attention](https://github.com/Dao-AILab/flash-attention/tree/main):** For optimized attention operations.
+
+Example of installing prerequisites. We recommended using `conda` for easy installation of Transformer Engine:
+```bash
+conda install -c nvidia cuda-nvcc cuda-cudart-dev
+conda install -c conda-forge transformer-engine-torch==2.3.0
+pip install flash-attn==2.8.0.post2
+```
+
+### Installing vortex
+After installing the requirements, you can install vortex:
 ```bash
 pip install vtx
 ```
-or you can install Vortex after cloning the repository:
+or you can install vortex after cloning the repository:
 ```bash
 pip install .
 ```
-Note this will take a few minutes to compile, which can be sped up by being on more CPUs.
 
 ## 2. Quick install for vortex ops
 
@@ -37,17 +51,7 @@ make setup-vortex-ops
 ```
 Note that this does not install all dependencies required to run autoregressive inference with larger pre-trained models.
 
-## 3. Building a custom development environment
-
-### Using conda, venv or uv
-
-To run e2e installation in a uv environment, use the following command:
-```bash
-make setup-full
-```
-Note that the `setup-full` step will compile various CUDA kernels, which usually takes at most several minutes. It may be necessary to customize CUDA header and library paths in `Makefile`.  
-
-## 4. Running in a Docker environment
+## 3. Running in a Docker environment
 
 Docker is one of the easiest ways to get started with Vortex (and Evo 2). The
 Docker environment does not depend on the currently installed CUDA version and
@@ -74,7 +78,6 @@ python3 generate.py \
 `--cached_generation` activates KV-caching and custom caching for different variants of Hyena layers, reducing peak memory usage and latency.
 
 
-
 ## Acknowledgements
 
 Vortex was developed by Michael Poli ([Zymrael](https://github.com/Zymrael)) and Garyk Brixi ([garykbrixi](https://github.com/garykbrixi)). Vortex maintainers include Michael Poli ([Zymrael](https://github.com/Zymrael)), Garyk Brixi ([garykbrixi](https://github.com/garykbrixi)), Anton Vorontsov ([antonvnv](https://github.com/antonvnv)) with contributions from Amy Lu ([amyxlu](https://github.com/amyxlu)), Jerome Ku ([jeromeku](https://github.com/jeromeku)).
@@ -82,5 +85,3 @@ Vortex was developed by Michael Poli ([Zymrael](https://github.com/Zymrael)) and
 ## Cite
 
 If you find this project useful, consider citing the following [references](CITE.md).
-
-
